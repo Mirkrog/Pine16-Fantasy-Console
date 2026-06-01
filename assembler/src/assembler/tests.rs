@@ -1,5 +1,5 @@
 /* ////////////////////////////////////
-    AI generated Unit Tests
+    Adapted Unit Tests
 //////////////////////////////////// */
 
 use super::*;
@@ -15,15 +15,19 @@ fn test_parse_register() {
 
 #[test]
 fn test_parse_argument_types() {
-    // Direct Value ($)
-    let arg = Argument::parse_argument("$42").unwrap();
+    // Direct Value (#)
+    let arg = Argument::parse_argument("#42").unwrap();
     assert_eq!(arg, Argument::DirectValue(42));
     assert!(arg.is_direct_value());
 
-    // Address (@)
-    let arg = Argument::parse_argument("@256").unwrap();
+    // Address ($#)
+    let arg = Argument::parse_argument("$#256").unwrap();
     assert_eq!(arg, Argument::Address(256));
     assert!(arg.is_address());
+
+    // Register Pointed Address ($*)
+    let arg = Argument::parse_argument("$*B").unwrap();
+    assert_eq!(arg, Argument::RegisterPointedAddress(Register::B));
 
     // Register (*)
     let arg = Argument::parse_argument("*B").unwrap();
@@ -38,8 +42,9 @@ fn test_parse_argument_types() {
 
 #[test]
 fn test_parse_argument_errors() {
-    assert!(Argument::parse_argument("$").is_err()); // Missing numerical value
-    assert!(Argument::parse_argument("@abc").is_err()); // Invalid numeric address
+    assert!(Argument::parse_argument("#").is_err()); // Missing numerical value
+    assert!(Argument::parse_argument("$").is_err()); // Expected identifier after $
+    assert!(Argument::parse_argument("$#abc").is_err()); // Invalid numeric address
     assert!(Argument::parse_argument("*X").is_err()); // Invalid register string
     assert!(Argument::parse_argument("label_with_numbers123").is_err()); // Non-alphabetic label
 }
@@ -48,7 +53,12 @@ fn test_parse_argument_errors() {
 
 #[test]
 fn test_assemble_basic_instructions() {
-    let source = "mov *A $10";
+    // mov *A #10
+    // OpCode::Mov = 6
+    // arg0: Register (*A) -> Bytecode Type: 3, Value: 0
+    // arg1: DirectValue (#10) -> Bytecode Type: 1, Value: 10
+    // First instruction (u16): (6 << 8) | (3 << 4) | 1 = 1536 | 48 | 1 = 1585
+    let source = "mov *A #10";
     let mut assembler = Assembler::new(source);
     let result = assembler.assemble().unwrap();
 
@@ -57,9 +67,20 @@ fn test_assemble_basic_instructions() {
 
 #[test]
 fn test_assemble_with_comments_and_whitespace() {
+    // mov *B $#50
+    // OpCode::Mov = 6
+    // arg0: Register (*B) -> Type: 3, Value: 1
+    // arg1: Address ($#50) -> Type: 2, Value: 50
+    // First instruction: (6 << 8) | (3 << 4) | 2 = 1536 | 48 | 2 = 1586
+    //
+    // stall
+    // OpCode::Stall = 5
+    // arg0: Empty -> Type: 0, Value: 0
+    // arg1: Empty -> Type: 0, Value: 0
+    // Fourth instruction: (5 << 8) | (0 << 4) | 0 = 1280
     let source = "
             ; This is a comment at the start
-            mov *B @50    ; Move value at address 50 to register B
+            mov *B $#50    ; Move value at address 50 to register B
             
             stall         ; Empty/Stall cycles
         ";
@@ -71,8 +92,12 @@ fn test_assemble_with_comments_and_whitespace() {
 
 #[test]
 fn test_labels_and_jumps() {
+    // mov *A #5  -> (6 << 8) | (3 << 4) | 1 = 1585, Val_A: 0, Val_5: 5
+    // jmp start  -> OpCode::Jmp = 7. arg0: Label -> Type: 5, Value: address of start (3)
+    //               arg1: Empty -> Type: 0, Value: 0
+    //               Instruction: (7 << 8) | (5 << 4) | 0 = 1792 | 80 | 0 = 1872
     let source = "
-            mov *A $5
+            mov *A #5
             start:
             jmp start
         ";
@@ -80,7 +105,7 @@ fn test_labels_and_jumps() {
     let result = assembler.assemble().unwrap();
 
     let expected_mov = vec![1585, 0, 5];
-    let expected_jmp = vec![1856, 3, 0];
+    let expected_jmp = vec![1872, 3, 0];
 
     let mut expected = expected_mov;
     expected.extend(expected_jmp);
@@ -95,7 +120,7 @@ fn test_labels_and_jumps() {
 fn test_duplicate_labels_error() {
     let source = "
             start:
-            mov *A $1
+            mov *A #1
             start:
         ";
     let mut assembler = Assembler::new(source);
@@ -108,7 +133,9 @@ fn test_duplicate_labels_error() {
 
 #[test]
 fn test_invalid_argument_type_error() {
-    let source = "add $10 *A";
+    // 'add' expects a register or address as its first argument.
+    // Providing a DirectValue (#10) will fail the validation check.
+    let source = "add #10 *A";
     let mut assembler = Assembler::new(source);
     let result = assembler.assemble();
 
@@ -130,7 +157,7 @@ fn test_missing_label_error() {
 
 #[test]
 fn test_u16_overflow_error() {
-    let source = "mov *A $65536";
+    let source = "mov *A #65536";
     let mut assembler = Assembler::new(source);
     let result = assembler.assemble();
 

@@ -1,8 +1,4 @@
-use std::{
-    any,
-    collections::HashMap,
-    iter::{Enumerate, Peekable},
-};
+use std::collections::HashMap;
 
 use anyhow::Context;
 
@@ -42,22 +38,38 @@ impl Register {
 #[non_exhaustive]
 pub enum Argument {
     Empty,
-    DirectValue(u16),   // Contains a Value
-    Address(u16),       // Points to a value
-    Register(Register), // Points to one of the registers
-    Label(String),      // Used as the target for jump instructions
+    DirectValue(u16),                 // Contains a Value
+    Address(u16),                     // uses a direct value to point to the memory location
+    RegisterPointedAddress(Register), // uses the value of the register to point to the memory location
+    Register(Register),               // Points to one of the registers
+    Label(String),                    // Used as the target for jump instructions, can also be used as a way of handling rom addresses
 }
 impl Argument {
     fn parse_argument(string: &str) -> anyhow::Result<Self> {
-        let (identifier, value) = string
-            .split_at(1);
+        let (identifier, value) = string.split_at(1);
         match identifier {
-            "$" => Ok(Self::DirectValue(value.parse::<u16>().with_context(
+            "#" => Ok(Self::DirectValue(value.parse::<u16>().with_context(
                 || format!("Failed parsing DirectValue from '{}'", value),
             )?)),
-            "@" => Ok(Self::Address(value.parse::<u16>().with_context(|| {
-                format!("Failed parsing Address from '{}'", value)
-            })?)),
+            "$" => {
+                let (address_type, value) = value
+                    .split_at_checked(1)
+                    .ok_or(anyhow::anyhow!("Expected Address identifier here: $<-"))?;
+                match address_type {
+                    "#" => Ok(Self::Address(value.parse::<u16>().with_context(|| {
+                        format!("Failed parsing Address from '{}'", value)
+                    })?)),
+                    "*" => Ok(Self::RegisterPointedAddress(Register::parse_register(
+                        value,
+                    )?)),
+                    other => anyhow::bail!(
+                        "Expected either # or * here: {}[=>{}]{}",
+                        identifier,
+                        other,
+                        value
+                    ),
+                }
+            }
             "*" => Ok(Self::Register(Register::parse_register(value)?)),
             other => {
                 if !string.is_empty() && string.chars().all(|c| c.is_alphabetic()) {
@@ -74,7 +86,8 @@ impl Argument {
             Self::DirectValue(_) => Ok(1),
             Self::Address(_) => Ok(2),
             Self::Register(_) => Ok(3),
-            Self::Label(_) => Ok(4),
+            Self::RegisterPointedAddress(_) => Ok(4),
+            Self::Label(_) => Ok(5),
         }
     }
     fn value_as_bytecode(&self, labels: &HashMap<String, u16>) -> anyhow::Result<u16> {
@@ -83,6 +96,7 @@ impl Argument {
             Self::DirectValue(value) => Ok(*value),
             Self::Address(address) => Ok(*address),
             Self::Register(register) => Ok(*register as u16),
+            Self::RegisterPointedAddress(register) => Ok(*register as u16),
             Self::Label(label) => Ok(*labels
                 .get(label)
                 .ok_or(anyhow::anyhow!("Label not found: {}", label))?),
@@ -167,7 +181,7 @@ impl<'a> Assembler<'a> {
                     None => continue,
                     Some(old) => {
                         anyhow::bail!(
-                            "Label '{}' defined twice at lines {}, {}",
+                            "Label '{}' defined twice at lines ({}, {})",
                             instruction.replace(':', ""),
                             old / 3 + 1,
                             index + 1
@@ -185,9 +199,7 @@ impl<'a> Assembler<'a> {
             return Ok(None); // We early return when it is a flag
         }
         let mut tokens = instruction.split_whitespace();
-        let opcode = tokens
-            .next()
-            .ok_or(anyhow::anyhow!("Operation not specified"))?;
+        let opcode = tokens.next().ok_or(anyhow::anyhow!("Empty Operation"))?;
 
         let mut args: Vec<Argument> = Vec::new();
         for token in tokens {
@@ -259,10 +271,6 @@ impl<'a> Assembler<'a> {
                 )?);
             }
             "jmp" => {
-                let arg0 = args
-                    .first()
-                    .ok_or(anyhow::anyhow!("Missing Argument for Jmp Operation"))?;
-
                 bytecode.extend_from_slice(&self.convert_to_bytecode(
                     OpCode::Jmp,
                     args,
