@@ -176,14 +176,14 @@ impl<'a> Assembler<'a> {
             if instruction.ends_with(':') {
                 match self
                     .labels
-                    .insert(instruction.replace(':', ""), bytecode_index * 3)
+                    .insert(instruction.replace(':', ""), bytecode_index)
                 {
                     None => continue,
                     Some(old) => {
                         anyhow::bail!(
                             "Label '{}' defined twice at lines ({}, {})",
                             instruction.replace(':', ""),
-                            old / 3 + 1,
+                            old + 1,
                             index + 1
                         )
                     }

@@ -105,13 +105,13 @@ fn test_labels_and_jumps() {
     let result = assembler.assemble().unwrap();
 
     let expected_mov = vec![1585, 0, 5];
-    let expected_jmp = vec![1872, 3, 0];
+    let expected_jmp = vec![1872, 1, 0];
 
     let mut expected = expected_mov;
     expected.extend(expected_jmp);
 
     assert_eq!(result, expected);
-    assert_eq!(*assembler.labels.get("start").unwrap(), 3);
+    assert_eq!(*assembler.labels.get("start").unwrap(), 1);
 }
 
 // --- Error and Edge Case Variant Tests ---

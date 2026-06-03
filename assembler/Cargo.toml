@@ -5,3 +5,5 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.102"
+byteorder = "1"
+simple-stopwatch = "0.1.4"
