@@ -1,7 +1,7 @@
-use std::{fs::File, io::Write};
+use std::fs::File;
 
 use anyhow::Ok;
-use byteorder::{BigEndian, LittleEndian, WriteBytesExt};
+use byteorder::{BigEndian, WriteBytesExt};
 use simple_stopwatch::Stopwatch;
 
 use crate::assembler::Assembler;
@@ -19,6 +19,6 @@ fn main() -> anyhow::Result<()> {
     }
 
     print!("Finished assembling in: {}s", stopwatch.s());
-    
+
     Ok(())
 }

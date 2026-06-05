@@ -50,6 +50,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "vconsole"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "byteorder",
+]
+
+[[package]]
 name = "wasi"
 version = "0.10.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
