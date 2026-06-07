@@ -1,6 +1,6 @@
 use byteorder::{BigEndian, ReadBytesExt};
 
-use std::{fs::File, io::BufReader};
+use std::{any, fs::File, io::BufReader};
 
 #[repr(u8)]
 #[non_exhaustive]
@@ -14,6 +14,23 @@ enum OpCode {
     Mov,
     Jmp,
 }
+impl OpCode {
+    fn from_u8(bytecode: u8) -> anyhow::Result<Self> {
+        match bytecode {
+            0 => Ok(OpCode::Add),
+            1 => Ok(OpCode::Sub),
+            2 => Ok(OpCode::Mul),
+            3 => Ok(OpCode::Div),
+            4 => Ok(OpCode::Exit),
+            5 => Ok(OpCode::Stall),
+            6 => Ok(OpCode::Mov),
+            7 => Ok(OpCode::Jmp),
+            other => {
+                anyhow::bail!("Unknown OpCode: {}  (0 - 7)", other)
+            }
+        }
+    }
+}
 #[derive(PartialEq, Debug, Clone, Copy)]
 #[non_exhaustive]
 pub enum Register {
@@ -25,28 +42,46 @@ pub enum Register {
 #[repr(u16)]
 #[derive(PartialEq, Debug, Clone)]
 #[non_exhaustive]
-pub enum Argument {
+pub enum ArgumentType {
     Empty,
-    DirectValue(u16),                 // Contains a Value
-    Address(u16),                     // uses a direct value to point to the memory location
-    RegisterPointedAddress(Register), // uses the value of the register to point to the memory location
-    Register(Register),               // Points to one of the registers
-    Label(String), // Used as the target for jump instructions, can also be used as a way of handling rom addresses
+    DirectValue,            // Contains a Value
+    Address,                // uses a direct value to point to the memory location
+    RegisterPointedAddress, // uses the value of the register to point to the memory location
+    Register,               // Points to one of the registers
+    Label, // Used as the target for jump instructions, can also be used as a way of handling rom addresses
+}
+impl ArgumentType {
+    fn from_u8(bytecode: u8) -> anyhow::Result<Self> {
+        match bytecode {
+            0 => Ok(ArgumentType::Empty),
+            1 => Ok(ArgumentType::DirectValue),
+            2 => Ok(ArgumentType::Address),
+            3 => Ok(ArgumentType::RegisterPointedAddress),
+            4 => Ok(ArgumentType::Register),
+            5 => Ok(ArgumentType::Label),
+            other => {
+                anyhow::bail!("Unknown ArgumentType: {} (0 - 5)", other)
+            }
+        }
+    }
 }
 
 struct Instruction {
     opcode: OpCode,
-    arg0: Argument,
-    arg1: Argument,
+    arg0type: ArgumentType,
+    arg1type: ArgumentType,
 }
 impl Instruction {
-    fn from_u16(source: &[u16; 3]) -> Self {
+    fn from_u16(source: &[u16; 3]) -> anyhow::Result<Self> {
+        // they are all bytes but arg0 and arg1 are only u4
         let (opcode_byte, args_byte) = ((source[0] >> 8) as u8, (source[0] & 0xff) as u8);
         let (arg0_byte, arg1_byte) = ((args_byte >> 4) as u8, (args_byte & 0b00001111) as u8);
 
-        Self {
-            opcode: opcode_byte,
-        }
+        Ok(Self {
+            opcode: OpCode::from_u8(opcode_byte)?,
+            arg0type: ArgumentType::from_u8(arg0_byte)?,
+            arg1type: ArgumentType::from_u8(arg1_byte)?,
+        })
     }
 }
 
