@@ -38,11 +38,11 @@ impl Register {
 #[non_exhaustive]
 pub enum Argument {
     Empty,
-    DirectValue(u16),                 // Contains a Value
-    Address(u16),                     // uses a direct value to point to the memory location
-    RegisterPointedAddress(Register), // uses the value of the register to point to the memory location
-    Register(Register),               // Points to one of the registers
-    Label(String),                    // Used as the target for jump instructions, can also be used as a way of handling rom addresses
+    DirectValue(u16),                 // # Contains a Value
+    Address(u16),                     // $# uses a direct value to point to the memory location
+    RegisterPointedAddress(Register), // $* uses the value of the register to point to the memory location
+    Register(Register),               // * Points to one of the registers
+    Label(String), // Used as the target for jump instructions, can also be used as a way of handling rom addresses
 }
 impl Argument {
     fn parse_argument(string: &str) -> anyhow::Result<Self> {

@@ -1,6 +1,6 @@
 use byteorder::{BigEndian, ReadBytesExt};
 
-use std::{any, fs::File, io::BufReader};
+use std::{any, fs::File, io::BufReader, sync::Arc};
 
 #[repr(u8)]
 #[non_exhaustive]
@@ -68,19 +68,23 @@ impl ArgumentType {
 
 struct Instruction {
     opcode: OpCode,
-    arg0type: ArgumentType,
-    arg1type: ArgumentType,
+    arg1_type: ArgumentType,
+    arg2_type: ArgumentType,
+    arg1: u16,
+    arg2: u16,
 }
 impl Instruction {
     fn from_u16(source: &[u16; 3]) -> anyhow::Result<Self> {
         // they are all bytes but arg0 and arg1 are only u4
         let (opcode_byte, args_byte) = ((source[0] >> 8) as u8, (source[0] & 0xff) as u8);
-        let (arg0_byte, arg1_byte) = ((args_byte >> 4) as u8, (args_byte & 0b00001111) as u8);
+        let (arg1_type_byte, arg2_type_byte) = ((args_byte >> 4), args_byte & 0b00001111);
 
         Ok(Self {
             opcode: OpCode::from_u8(opcode_byte)?,
-            arg0type: ArgumentType::from_u8(arg0_byte)?,
-            arg1type: ArgumentType::from_u8(arg1_byte)?,
+            arg1_type: ArgumentType::from_u8(arg1_type_byte)?,
+            arg2_type: ArgumentType::from_u8(arg2_type_byte)?,
+            arg1: source[1],
+            arg2: source[2],
         })
     }
 }
@@ -115,11 +119,26 @@ impl Interpreter {
             }
         }
     }
-    fn interpret_next_instruction(&mut self) -> bool {}
+    fn interpret_next_instruction(&mut self) -> bool {
+        let instruction = Instruction::from_u16(
+            &self.rom[self.program_ptr..self.program_ptr + 3]
+                .try_into()
+                .unwrap(),
+        )
+        .unwrap();
+
+        false
+    }
     pub fn load_rom_from_path(&mut self, path: &str) -> anyhow::Result<()> {
         self.rom = read_file_as_u16_vec(path)?;
 
         Ok(())
+    }
+    fn read_argument(arg_type: ArgumentType, pointer: u16) {
+        unimplemented!()
+    }
+    fn write_argument(arg_type: ArgumentType, pointer: u16) {
+        unimplemented!()
     }
 }
 
