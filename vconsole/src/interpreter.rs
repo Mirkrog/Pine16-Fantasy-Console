@@ -1,6 +1,12 @@
 use byteorder::{BigEndian, ReadBytesExt};
 
-use std::{any, fs::File, io::BufReader, sync::Arc};
+use std::{
+    any,
+    fs::File,
+    io::{BufRead, BufReader, ErrorKind, Read},
+    ptr::read,
+    sync::Arc,
+};
 
 #[repr(u8)]
 #[non_exhaustive]
@@ -89,6 +95,12 @@ impl Instruction {
     }
 }
 
+enum VersionMatchType {
+    full,         // The Version Number matches down to the patch
+    partial,      // The Version Number matches but not the patch
+    incompatible, // The Mayor or Minor Version doesn't match
+}
+
 pub struct Interpreter {
     rom: Vec<u16>,
     sram: Vec<u16>,
@@ -114,24 +126,49 @@ impl Interpreter {
     }
     pub fn run(&mut self) {
         loop {
-            if self.interpret_next_instruction() {
-                break;
-            }
+            let instruction = self.parse_next_instruction();
         }
     }
-    fn interpret_next_instruction(&mut self) -> bool {
-        let instruction = Instruction::from_u16(
+    pub fn parse_next_instruction(&mut self) -> Instruction {
+        Instruction::from_u16(
             &self.rom[self.program_ptr..self.program_ptr + 3]
                 .try_into()
                 .unwrap(),
         )
-        .unwrap();
-
-        false
+        .unwrap()
     }
     pub fn load_rom_from_path(&mut self, path: &str) -> anyhow::Result<()> {
-        self.rom = read_file_as_u16_vec(path)?;
+        let file = File::open(path)?;
+        let metadata = file.metadata()?;
+        let file_size_bytes = metadata.len();
+        let u16_capacity = (file_size_bytes / 2 - 10) as usize; // Ignoring the Magic and Version
+        let mut reader = BufReader::new(file);
+        self.rom = Vec::with_capacity(u16_capacity);
 
+        reader.read_exact(&mut [0; 17])?;
+
+        let mut version_bytes: [u8; 3] = [0; 3];
+        reader.read_exact(&mut version_bytes)?;
+        match compare_version(version_bytes) {
+            VersionMatchType::full => {}
+            VersionMatchType::partial => {
+                println!("Warning Rom is only partially compatible")
+            }
+            VersionMatchType::incompatible => {
+                panic!("Rom is not compatible")
+            }
+        }
+
+        for i in 0..u16_capacity {
+            self.rom.push(match reader.read_u16::<BigEndian>() {
+                Ok(value) => value,
+                Err(e) => {
+                    panic!("{}", e)
+                }
+            });
+        }
+
+        println!("Done loading Rom");
         Ok(())
     }
     fn read_argument(arg_type: ArgumentType, pointer: u16) {
@@ -142,23 +179,16 @@ impl Interpreter {
     }
 }
 
-fn read_file_as_u16_vec(file_path: &str) -> anyhow::Result<Vec<u16>> {
-    let file = File::open(file_path)?;
-    let metadata = file.metadata()?;
-    let file_size_bytes = metadata.len();
-    let u16_capacity = (file_size_bytes / 2) as usize;
-    let mut u16_buffer = Vec::with_capacity(u16_capacity);
-    let mut reader = BufReader::new(file);
-    loop {
-        match reader.read_u16::<BigEndian>() {
-            Ok(value) => u16_buffer.push(value),
-            Err(e) => {
-                if e.kind() == std::io::ErrorKind::UnexpectedEof {
-                    break;
-                }
-                return Err(e.into());
-            }
-        }
+fn compare_version(version_bytes: [u8; 3]) -> VersionMatchType {
+    let mayor_version = env!("CARGO_PKG_VERSION_MAJOR").parse::<u8>().unwrap();
+    let minor_version = env!("CARGO_PKG_VERSION_MINOR").parse::<u8>().unwrap();
+    let patch_version = env!("CARGO_PKG_VERSION_PATCH").parse::<u8>().unwrap();
+
+    if mayor_version != version_bytes[0] || minor_version != version_bytes[1] {
+        return VersionMatchType::incompatible;
     }
-    Ok(u16_buffer)
+    if patch_version != version_bytes[2] {
+        return VersionMatchType::partial;
+    }
+    VersionMatchType::full
 }
