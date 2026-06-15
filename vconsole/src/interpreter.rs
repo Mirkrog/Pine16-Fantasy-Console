@@ -1,15 +1,13 @@
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
 
 use std::{
-    any,
     fs::File,
-    io::{BufRead, BufReader, ErrorKind, Read},
-    ptr::read,
-    sync::Arc,
+    io::{BufReader, Read},
+    io::{Seek, SeekFrom},
 };
 
 #[repr(u8)]
-#[non_exhaustive]
+#[derive(PartialEq, Eq, Debug)]
 enum OpCode {
     Add,
     Sub,
@@ -37,17 +35,9 @@ impl OpCode {
         }
     }
 }
-#[derive(PartialEq, Debug, Clone, Copy)]
-#[non_exhaustive]
-pub enum Register {
-    A,
-    B,
-    C,
-    D,
-}
+
 #[repr(u16)]
-#[derive(PartialEq, Debug, Clone)]
-#[non_exhaustive]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum ArgumentType {
     Empty,
     DirectValue,            // Contains a Value
@@ -62,8 +52,8 @@ impl ArgumentType {
             0 => Ok(ArgumentType::Empty),
             1 => Ok(ArgumentType::DirectValue),
             2 => Ok(ArgumentType::Address),
-            3 => Ok(ArgumentType::RegisterPointedAddress),
-            4 => Ok(ArgumentType::Register),
+            3 => Ok(ArgumentType::Register),
+            4 => Ok(ArgumentType::RegisterPointedAddress),
             5 => Ok(ArgumentType::Label),
             other => {
                 anyhow::bail!("Unknown ArgumentType: {} (0 - 5)", other)
@@ -72,13 +62,24 @@ impl ArgumentType {
     }
 }
 
-struct Instruction {
-    opcode: OpCode,
-    arg1_type: ArgumentType,
-    arg2_type: ArgumentType,
-    arg1: u16,
-    arg2: u16,
+#[derive(PartialEq, Eq, Debug)]
+pub struct Argument {
+    arg_type: ArgumentType,
+    value: u16,
 }
+impl Argument {
+    pub fn new(arg_type: ArgumentType, value: u16) -> Self {
+        Self { arg_type, value }
+    }
+}
+
+#[derive(PartialEq, Eq, Debug)]
+pub struct Instruction {
+    opcode: OpCode,
+    arg1: Argument,
+    arg2: Argument,
+}
+
 impl Instruction {
     fn from_u16(source: &[u16; 3]) -> anyhow::Result<Self> {
         // they are all bytes but arg0 and arg1 are only u4
@@ -87,38 +88,38 @@ impl Instruction {
 
         Ok(Self {
             opcode: OpCode::from_u8(opcode_byte)?,
-            arg1_type: ArgumentType::from_u8(arg1_type_byte)?,
-            arg2_type: ArgumentType::from_u8(arg2_type_byte)?,
-            arg1: source[1],
-            arg2: source[2],
+            arg1: Argument::new(ArgumentType::from_u8(arg1_type_byte)?, source[1]),
+            arg2: Argument::new(ArgumentType::from_u8(arg2_type_byte)?, source[2]),
         })
     }
 }
 
 enum VersionMatchType {
-    full,         // The Version Number matches down to the patch
-    partial,      // The Version Number matches but not the patch
-    incompatible, // The Mayor or Minor Version doesn't match
+    Full,         // The Version Number matches down to the patch
+    Partial,      // The Version Number matches but not the patch
+    Incompatible, // The Mayor or Minor Version doesn't match
 }
 
 pub struct Interpreter {
     rom: Vec<u16>,
     sram: Vec<u16>,
     sram_size: usize,
-    stack_size: usize,
-    stack_ptr: usize,
-    program_ptr: usize,
+    program_ptr: u32,
+    stall_timer: u16,
+    exit_code: u16,
+    registers: [u16; 4],
 }
 
 impl Interpreter {
     pub fn new(sram_size: usize, stack_size: usize) -> Self {
         Self {
             rom: Vec::new(),
-            sram: Vec::with_capacity(sram_size),
+            sram: vec![0; sram_size],
             sram_size,
-            stack_size,
-            stack_ptr: 0,
             program_ptr: 0,
+            stall_timer: 0,
+            exit_code: 0,
+            registers: [0; 4],
         }
     }
     pub fn default() -> Self {
@@ -126,12 +127,103 @@ impl Interpreter {
     }
     pub fn run(&mut self) {
         loop {
+            if self.stall_timer > 0 {
+                self.stall_timer -= 1;
+                continue;
+            }
             let instruction = self.parse_next_instruction();
+            println!("{:#?}", instruction);
+            match instruction.opcode {
+                OpCode::Add => {
+                    let val1 = self.read_arg(&instruction.arg1);
+                    let val2 = self.read_arg(&instruction.arg2);
+                    self.write_arg(&instruction.arg1, val1 + val2);
+                }
+                OpCode::Sub => {
+                    let val1 = self.read_arg(&instruction.arg1);
+                    let val2 = self.read_arg(&instruction.arg2);
+                    self.write_arg(&instruction.arg1, val1 - val2);
+                }
+                OpCode::Mul => {
+                    let val1 = self.read_arg(&instruction.arg1);
+                    let val2 = self.read_arg(&instruction.arg2);
+                    self.write_arg(&instruction.arg1, val1 * val2);
+                }
+                OpCode::Div => {
+                    let val1 = self.read_arg(&instruction.arg1);
+                    let val2 = self.read_arg(&instruction.arg2);
+                    self.write_arg(&instruction.arg1, val1 / val2);
+                }
+                OpCode::Stall => self.stall_timer = self.read_arg(&instruction.arg1),
+                OpCode::Exit => {
+                    self.exit_code = self.read_arg(&instruction.arg1);
+                    break;
+                }
+                // TODO: add longjumps
+                OpCode::Jmp => self.program_ptr = self.read_arg(&instruction.arg1) as u32,
+                OpCode::Mov => {
+                    let val2 = self.read_arg(&instruction.arg2);
+                    self.write_arg(&instruction.arg1, val2);
+                }
+            }
+            self.program_ptr += 1;
+            if self.program_ptr as usize >= self.rom.len() / 3 {
+                self.exit_code = 0;
+                break;
+            }
+        }
+        println!("Program quit with exit code: {}", self.exit_code)
+    }
+    fn read_arg(&mut self, arg: &Argument) -> u16 {
+        match arg.arg_type {
+            ArgumentType::Empty => panic!("Can't read from empty"),
+            ArgumentType::DirectValue => arg.value,
+            ArgumentType::Address => self.sram.get(arg.value as usize).cloned().unwrap_or(0),
+            ArgumentType::Label => arg.value,
+            ArgumentType::Register => {
+                if (arg.value as usize) >= self.registers.len() {
+                    panic!("Register address out of bounds: {}", arg.value)
+                }
+                self.registers[arg.value as usize]
+            }
+            ArgumentType::RegisterPointedAddress => {
+                if (arg.value as usize) >= self.registers.len() {
+                    panic!("Register address out of bounds: {}", arg.value)
+                }
+                let register = self.registers[arg.value as usize];
+                self.sram.get(register as usize).cloned().unwrap_or(0)
+            }
+        }
+    }
+    fn write_arg(&mut self, arg: &Argument, value: u16) {
+        match arg.arg_type {
+            ArgumentType::Empty => panic!("Can't write to empty"),
+            ArgumentType::DirectValue => {
+                panic!("Can't write to direct Value")
+            }
+            ArgumentType::Address => self.sram.insert(arg.value as usize, value),
+            ArgumentType::Label => panic!("Can't write to label"),
+            ArgumentType::Register => {
+                if (arg.value as usize) >= self.registers.len() {
+                    panic!("Register address out of bounds: {}", arg.value)
+                }
+                self.registers[arg.value as usize] = value
+            }
+            ArgumentType::RegisterPointedAddress => {
+                if (arg.value as usize) >= self.registers.len() {
+                    panic!("Register address out of bounds: {}", arg.value)
+                }
+                let register = self.registers[arg.value as usize];
+                self.sram.insert(register as usize, value)
+            }
         }
     }
     pub fn parse_next_instruction(&mut self) -> Instruction {
         Instruction::from_u16(
-            &self.rom[self.program_ptr..self.program_ptr + 3]
+            &self
+                .rom
+                .get((self.program_ptr as usize * 3)..(self.program_ptr as usize * 3) + 3)
+                .expect("Out of bounds Instruction read")
                 .try_into()
                 .unwrap(),
         )
@@ -145,22 +237,27 @@ impl Interpreter {
         let mut reader = BufReader::new(file);
         self.rom = Vec::with_capacity(u16_capacity);
 
-        reader.read_exact(&mut [0; 17])?;
+        // The secret is ignored when assembling so it is also ignored when interpreting
+        reader.seek(SeekFrom::Start(17))?;
 
         let mut version_bytes: [u8; 3] = [0; 3];
         reader.read_exact(&mut version_bytes)?;
         match compare_version(version_bytes) {
-            VersionMatchType::full => {}
-            VersionMatchType::partial => {
+            VersionMatchType::Full => {}
+            VersionMatchType::Partial => {
                 println!("Warning Rom is only partially compatible")
             }
-            VersionMatchType::incompatible => {
-                panic!("Rom is not compatible")
+            VersionMatchType::Incompatible => {
+                panic!(
+                    "Rom is not compatible console_ver: {}, bin_ver: {:?}",
+                    env!("CARGO_PKG_VERSION"),
+                    version_bytes
+                )
             }
         }
 
         for i in 0..u16_capacity {
-            self.rom.push(match reader.read_u16::<BigEndian>() {
+            self.rom.push(match reader.read_u16::<LittleEndian>() {
                 Ok(value) => value,
                 Err(e) => {
                     panic!("{}", e)
@@ -169,13 +266,10 @@ impl Interpreter {
         }
 
         println!("Done loading Rom");
+        for val in &self.rom {
+            println!("{:#16b},", val)
+        }
         Ok(())
-    }
-    fn read_argument(arg_type: ArgumentType, pointer: u16) {
-        unimplemented!()
-    }
-    fn write_argument(arg_type: ArgumentType, pointer: u16) {
-        unimplemented!()
     }
 }
 
@@ -185,10 +279,10 @@ fn compare_version(version_bytes: [u8; 3]) -> VersionMatchType {
     let patch_version = env!("CARGO_PKG_VERSION_PATCH").parse::<u8>().unwrap();
 
     if mayor_version != version_bytes[0] || minor_version != version_bytes[1] {
-        return VersionMatchType::incompatible;
+        return VersionMatchType::Incompatible;
     }
     if patch_version != version_bytes[2] {
-        return VersionMatchType::partial;
+        return VersionMatchType::Partial;
     }
-    VersionMatchType::full
+    VersionMatchType::Full
 }

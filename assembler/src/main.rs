@@ -14,7 +14,7 @@ fn main() -> anyhow::Result<()> {
 
     let mut out_file = File::create("test.v16.o")?;
 
-    let mut buffer = [0u8; 23];
+    let mut buffer = [0u8; 20];
     buffer[..17].copy_from_slice("V16ASSEMBLYCODE:D".as_bytes());
     buffer[17] = env!("CARGO_PKG_VERSION_MAJOR").parse::<u8>().unwrap();
     buffer[18] = env!("CARGO_PKG_VERSION_MINOR").parse::<u8>().unwrap();
