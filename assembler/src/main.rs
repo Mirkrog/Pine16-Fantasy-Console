@@ -1,7 +1,7 @@
 use std::{fs::File, io::Write};
 
 use anyhow::Ok;
-use byteorder::{BigEndian, LittleEndian, WriteBytesExt};
+use byteorder::{LittleEndian, WriteBytesExt};
 use simple_stopwatch::Stopwatch;
 
 use crate::assembler::Assembler;

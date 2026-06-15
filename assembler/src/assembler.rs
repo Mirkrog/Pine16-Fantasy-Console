@@ -105,7 +105,7 @@ impl Argument {
     fn is_empty(&self) -> bool {
         matches!(self, Self::Empty)
     }
-    fn is_address(&self) -> bool {
+    fn is_direct_address(&self) -> bool {
         matches!(self, Self::Address(_))
     }
     fn is_direct_value(&self) -> bool {
@@ -116,6 +116,12 @@ impl Argument {
     }
     fn is_label(&self) -> bool {
         matches!(self, Self::Label(_))
+    }
+    pub fn is_register_pointed(&self) -> bool {
+        matches!(self, Self::RegisterPointedAddress(_))
+    }
+    pub fn is_address(&self) -> bool {
+        self.is_direct_address() | self.is_register_pointed()
     }
 }
 
@@ -162,15 +168,16 @@ impl<'a> Assembler<'a> {
     fn assemble_prepass(&mut self) -> anyhow::Result<()> {
         let mut bytecode_index = 0;
         for (index, instruction) in self.source.lines().enumerate() {
-            let instruction = match instruction.trim().split(';').next() {
+            let instruction = match instruction.split(';').next() {
                 None => {
                     continue;
                 }
                 Some(instruction) => {
-                    if instruction.is_empty() {
+                    let trimmed = instruction.trim();
+                    if trimmed.trim().is_empty() {
                         continue;
                     }
-                    instruction
+                    trimmed
                 }
             };
             if instruction.ends_with(':') {

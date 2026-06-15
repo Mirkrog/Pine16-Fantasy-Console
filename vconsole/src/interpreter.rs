@@ -111,7 +111,7 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn new(sram_size: usize, stack_size: usize) -> Self {
+    pub fn new(sram_size: usize) -> Self {
         Self {
             rom: Vec::new(),
             sram: vec![0; sram_size],
@@ -123,7 +123,7 @@ impl Interpreter {
         }
     }
     pub fn default() -> Self {
-        Self::new(128 * 1000, 100)
+        Self::new(128 * 1000)
     }
     pub fn run(&mut self) {
         loop {
@@ -160,7 +160,8 @@ impl Interpreter {
                     break;
                 }
                 // TODO: add longjumps
-                OpCode::Jmp => self.program_ptr = self.read_arg(&instruction.arg1) as u32,
+                // we have to jump to the address - 1 because the program_pointer is incremented after this
+                OpCode::Jmp => self.program_ptr = self.read_arg(&instruction.arg1) as u32 - 1,
                 OpCode::Mov => {
                     let val2 = self.read_arg(&instruction.arg2);
                     self.write_arg(&instruction.arg1, val2);
@@ -201,7 +202,7 @@ impl Interpreter {
             ArgumentType::DirectValue => {
                 panic!("Can't write to direct Value")
             }
-            ArgumentType::Address => self.sram.insert(arg.value as usize, value),
+            ArgumentType::Address => self.sram[arg.value as usize] = value,
             ArgumentType::Label => panic!("Can't write to label"),
             ArgumentType::Register => {
                 if (arg.value as usize) >= self.registers.len() {
@@ -214,7 +215,7 @@ impl Interpreter {
                     panic!("Register address out of bounds: {}", arg.value)
                 }
                 let register = self.registers[arg.value as usize];
-                self.sram.insert(register as usize, value)
+                self.sram[register as usize] = value
             }
         }
     }
@@ -256,7 +257,7 @@ impl Interpreter {
             }
         }
 
-        for i in 0..u16_capacity {
+        for _ in 0..u16_capacity {
             self.rom.push(match reader.read_u16::<LittleEndian>() {
                 Ok(value) => value,
                 Err(e) => {
