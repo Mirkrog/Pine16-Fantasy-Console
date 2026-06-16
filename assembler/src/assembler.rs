@@ -13,6 +13,27 @@ enum OpCode {
     Stall,
     Mov,
     Jmp,
+    Jeq,
+    Jne,
+}
+impl OpCode {
+    fn from_str(string: &str) -> anyhow::Result<Self> {
+        match string {
+            "add" => Ok(OpCode::Add),
+            "sub" => Ok(OpCode::Sub),
+            "mul" => Ok(OpCode::Mul),
+            "div" => Ok(OpCode::Div),
+            "exit" => Ok(OpCode::Exit),
+            "stall" => Ok(OpCode::Stall),
+            "mov" => Ok(OpCode::Mov),
+            "jmp" => Ok(OpCode::Jmp),
+            "jeq" => Ok(OpCode::Jeq),
+            "jne" => Ok(OpCode::Jne),
+            other => {
+                anyhow::bail!("Unknown operation: {}", other)
+            }
+        }
+    }
 }
 #[derive(PartialEq, Debug, Clone, Copy)]
 #[non_exhaustive]
@@ -72,7 +93,7 @@ impl Argument {
             }
             "*" => Ok(Self::Register(Register::parse_register(value)?)),
             other => {
-                if !string.is_empty() && string.chars().all(|c| c.is_alphabetic()) {
+                if !string.is_empty() && string.starts_with(|c: char| c.is_alphabetic()) {
                     Ok(Self::Label(string.to_string()))
                 } else {
                     anyhow::bail!("Unknown argument type: =>[{}]{}", other, value)
@@ -83,11 +104,10 @@ impl Argument {
     fn as_bytecode(&self) -> anyhow::Result<u16> {
         match self {
             Self::Empty => Ok(0),
-            Self::DirectValue(_) => Ok(1),
+            Self::DirectValue(_) | Self::Label(_) => Ok(1),
             Self::Address(_) => Ok(2),
             Self::Register(_) => Ok(3),
             Self::RegisterPointedAddress(_) => Ok(4),
-            Self::Label(_) => Ok(5),
         }
     }
     fn value_as_bytecode(&self, labels: &HashMap<String, u16>) -> anyhow::Result<u16> {
@@ -104,6 +124,15 @@ impl Argument {
     }
     fn is_empty(&self) -> bool {
         matches!(self, Self::Empty)
+    }
+    fn is_readable(&self) -> bool {
+        !self.is_empty()
+    }
+    fn is_writable(&self) -> bool {
+        self.is_address()
+            | self.is_direct_address()
+            | self.is_register()
+            | self.is_register_pointed()
     }
     fn is_direct_address(&self) -> bool {
         matches!(self, Self::Address(_))
@@ -155,8 +184,8 @@ impl<'a> Assembler<'a> {
             };
             match self.assemble_instruction(instruction) {
                 Ok(None) => continue,
-                Ok(Some(mut bytecode)) => {
-                    assembly.append(&mut bytecode);
+                Ok(Some(bytecode)) => {
+                    assembly.extend_from_slice(&bytecode);
                 }
                 Err(e) => anyhow::bail!("Error occured on line {}: {}", index + 1, e),
             }
@@ -201,95 +230,77 @@ impl<'a> Assembler<'a> {
         }
         Ok(())
     }
-    fn assemble_instruction(&mut self, instruction: &str) -> anyhow::Result<Option<Vec<u16>>> {
+    fn assemble_instruction(&mut self, instruction: &str) -> anyhow::Result<Option<[u16; 3]>> {
         if instruction.ends_with(':') {
             return Ok(None); // We early return when it is a flag
         }
         let mut tokens = instruction.split_whitespace();
-        let opcode = tokens.next().ok_or(anyhow::anyhow!("Empty Operation"))?;
+        let opcode = OpCode::from_str(
+            tokens
+                .next()
+                .ok_or(anyhow::anyhow!("Empty Operation"))?
+                .to_lowercase()
+                .as_str(),
+        )?;
 
         let mut args: Vec<Argument> = Vec::new();
         for token in tokens {
             args.push(Argument::parse_argument(token)?);
         }
 
-        let mut bytecode: Vec<u16> = Vec::new();
-
-        match opcode.to_lowercase().as_str() {
-            "add" => {
-                bytecode.extend_from_slice(&self.convert_to_bytecode(
-                    OpCode::Add,
-                    args,
-                    Some(|arg| arg.is_address() | arg.is_register()),
-                    Some(|arg| arg.is_address() | arg.is_direct_value() | arg.is_register()),
-                )?);
+        Ok(Some(match opcode {
+            OpCode::Add => self.convert_to_bytecode(
+                opcode,
+                args,
+                Some(|arg| arg.is_writable()),
+                Some(|arg| arg.is_readable()),
+            )?,
+            OpCode::Sub => self.convert_to_bytecode(
+                opcode,
+                args,
+                Some(|arg| arg.is_writable()),
+                Some(|arg| arg.is_readable()),
+            )?,
+            OpCode::Mul => self.convert_to_bytecode(
+                opcode,
+                args,
+                Some(|arg| arg.is_writable()),
+                Some(|arg| arg.is_readable()),
+            )?,
+            OpCode::Div => self.convert_to_bytecode(
+                opcode,
+                args,
+                Some(|arg| arg.is_writable()),
+                Some(|arg| arg.is_readable()),
+            )?,
+            OpCode::Exit => {
+                self.convert_to_bytecode(opcode, args, Some(|arg| arg.is_readable()), None)?
             }
-            "sub" => {
-                bytecode.extend_from_slice(&self.convert_to_bytecode(
-                    OpCode::Sub,
-                    args,
-                    Some(|arg| arg.is_address() | arg.is_register()),
-                    Some(|arg| arg.is_address() | arg.is_direct_value() | arg.is_register()),
-                )?);
+            OpCode::Stall => {
+                self.convert_to_bytecode(opcode, args, Some(|arg| arg.is_readable()), None)?
             }
-            "mul" => {
-                bytecode.extend_from_slice(&self.convert_to_bytecode(
-                    OpCode::Mul,
-                    args,
-                    Some(|arg| arg.is_address() | arg.is_register()),
-                    Some(|arg| arg.is_address() | arg.is_direct_value() | arg.is_register()),
-                )?);
+            OpCode::Mov => self.convert_to_bytecode(
+                opcode,
+                args,
+                Some(|arg| arg.is_writable()),
+                Some(|arg| arg.is_readable()),
+            )?,
+            OpCode::Jmp => {
+                self.convert_to_bytecode(opcode, args, Some(|arg| arg.is_label()), None)?
             }
-            "div" => {
-                bytecode.extend_from_slice(&self.convert_to_bytecode(
-                    OpCode::Div,
-                    args,
-                    Some(|arg| arg.is_address() | arg.is_register()),
-                    Some(|arg| arg.is_address() | arg.is_direct_value() | arg.is_register()),
-                )?);
-            }
-            "exit" => {
-                bytecode.extend_from_slice(&self.convert_to_bytecode(
-                    OpCode::Exit,
-                    args,
-                    Some(|arg| {
-                        arg.is_address()
-                            | arg.is_empty()
-                            | arg.is_direct_value()
-                            | arg.is_register()
-                    }),
-                    None,
-                )?);
-            }
-            "stall" => {
-                bytecode.extend_from_slice(&self.convert_to_bytecode(
-                    OpCode::Stall,
-                    args,
-                    Some(|arg| arg.is_address() | arg.is_empty() | arg.is_direct_value()),
-                    None,
-                )?);
-            }
-            "mov" => {
-                bytecode.extend_from_slice(&self.convert_to_bytecode(
-                    OpCode::Mov,
-                    args,
-                    Some(|arg| arg.is_address() | arg.is_register()),
-                    Some(|arg| arg.is_address() | arg.is_direct_value() | arg.is_register()),
-                )?);
-            }
-            "jmp" => {
-                bytecode.extend_from_slice(&self.convert_to_bytecode(
-                    OpCode::Jmp,
-                    args,
-                    Some(|arg| arg.is_label()),
-                    Some(|arg| arg.is_direct_value() | arg.is_address() | arg.is_empty()),
-                )?);
-            }
-            other => {
-                anyhow::bail!("Unknown operation: {}", other)
-            }
-        }
-        Ok(Some(bytecode))
+            OpCode::Jeq => self.convert_to_bytecode(
+                opcode,
+                args,
+                Some(|arg| arg.is_label()),
+                Some(|arg| arg.is_readable()),
+            )?,
+            OpCode::Jne => self.convert_to_bytecode(
+                opcode,
+                args,
+                Some(|arg| arg.is_label()),
+                Some(|arg| arg.is_readable()),
+            )?,
+        }))
     }
     fn convert_to_bytecode(
         &mut self,

@@ -1,4 +1,4 @@
-use byteorder::{BigEndian, LittleEndian, ReadBytesExt};
+use byteorder::{LittleEndian, ReadBytesExt};
 
 use std::{
     fs::File,
@@ -17,6 +17,8 @@ enum OpCode {
     Stall,
     Mov,
     Jmp,
+    Jeq,
+    Jne,
 }
 impl OpCode {
     fn from_u8(bytecode: u8) -> anyhow::Result<Self> {
@@ -29,6 +31,8 @@ impl OpCode {
             5 => Ok(OpCode::Stall),
             6 => Ok(OpCode::Mov),
             7 => Ok(OpCode::Jmp),
+            8 => Ok(OpCode::Jeq),
+            9 => Ok(OpCode::Jne),
             other => {
                 anyhow::bail!("Unknown OpCode: {}  (0 - 7)", other)
             }
@@ -44,7 +48,6 @@ pub enum ArgumentType {
     Address,                // uses a direct value to point to the memory location
     RegisterPointedAddress, // uses the value of the register to point to the memory location
     Register,               // Points to one of the registers
-    Label, // Used as the target for jump instructions, can also be used as a way of handling rom addresses
 }
 impl ArgumentType {
     fn from_u8(bytecode: u8) -> anyhow::Result<Self> {
@@ -54,7 +57,6 @@ impl ArgumentType {
             2 => Ok(ArgumentType::Address),
             3 => Ok(ArgumentType::Register),
             4 => Ok(ArgumentType::RegisterPointedAddress),
-            5 => Ok(ArgumentType::Label),
             other => {
                 anyhow::bail!("Unknown ArgumentType: {} (0 - 5)", other)
             }
@@ -132,27 +134,27 @@ impl Interpreter {
                 continue;
             }
             let instruction = self.parse_next_instruction();
-            println!("{:#?}", instruction);
+            println!("{:?}", instruction);
             match instruction.opcode {
                 OpCode::Add => {
                     let val1 = self.read_arg(&instruction.arg1);
                     let val2 = self.read_arg(&instruction.arg2);
-                    self.write_arg(&instruction.arg1, val1 + val2);
+                    self.write_arg(&instruction.arg1, val1.wrapping_add(val2));
                 }
                 OpCode::Sub => {
                     let val1 = self.read_arg(&instruction.arg1);
                     let val2 = self.read_arg(&instruction.arg2);
-                    self.write_arg(&instruction.arg1, val1 - val2);
+                    self.write_arg(&instruction.arg1, val1.wrapping_sub(val2));
                 }
                 OpCode::Mul => {
                     let val1 = self.read_arg(&instruction.arg1);
                     let val2 = self.read_arg(&instruction.arg2);
-                    self.write_arg(&instruction.arg1, val1 * val2);
+                    self.write_arg(&instruction.arg1, val1.wrapping_mul(val2));
                 }
                 OpCode::Div => {
                     let val1 = self.read_arg(&instruction.arg1);
                     let val2 = self.read_arg(&instruction.arg2);
-                    self.write_arg(&instruction.arg1, val1 / val2);
+                    self.write_arg(&instruction.arg1, val1.wrapping_div(val2));
                 }
                 OpCode::Stall => self.stall_timer = self.read_arg(&instruction.arg1),
                 OpCode::Exit => {
@@ -165,6 +167,16 @@ impl Interpreter {
                 OpCode::Mov => {
                     let val2 = self.read_arg(&instruction.arg2);
                     self.write_arg(&instruction.arg1, val2);
+                }
+                OpCode::Jeq => {
+                    if self.read_arg(&instruction.arg2) == 0 {
+                        self.program_ptr = self.read_arg(&instruction.arg1) as u32 - 1
+                    }
+                }
+                OpCode::Jne => {
+                    if self.read_arg(&instruction.arg2) != 0 {
+                        self.program_ptr = self.read_arg(&instruction.arg1) as u32 - 1
+                    }
                 }
             }
             self.program_ptr += 1;
@@ -180,7 +192,6 @@ impl Interpreter {
             ArgumentType::Empty => panic!("Can't read from empty"),
             ArgumentType::DirectValue => arg.value,
             ArgumentType::Address => self.sram.get(arg.value as usize).cloned().unwrap_or(0),
-            ArgumentType::Label => arg.value,
             ArgumentType::Register => {
                 if (arg.value as usize) >= self.registers.len() {
                     panic!("Register address out of bounds: {}", arg.value)
@@ -203,7 +214,6 @@ impl Interpreter {
                 panic!("Can't write to direct Value")
             }
             ArgumentType::Address => self.sram[arg.value as usize] = value,
-            ArgumentType::Label => panic!("Can't write to label"),
             ArgumentType::Register => {
                 if (arg.value as usize) >= self.registers.len() {
                     panic!("Register address out of bounds: {}", arg.value)
@@ -267,9 +277,6 @@ impl Interpreter {
         }
 
         println!("Done loading Rom");
-        for val in &self.rom {
-            println!("{:#16b},", val)
-        }
         Ok(())
     }
 }

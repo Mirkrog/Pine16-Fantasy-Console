@@ -26,6 +26,6 @@ fn main() -> anyhow::Result<()> {
         out_file.write_u16::<LittleEndian>(bytepair)?
     }
 
-    print!("Finished assembling in: {}s", stopwatch.s());
+    println!("Finished assembling in: {}s", stopwatch.s());
     Ok(())
 }
