@@ -44,7 +44,7 @@ impl OpCode {
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum ArgumentType {
     Empty,
-    DirectValue,            // Contains a Value
+    Immediate,              // Contains a Value
     Address,                // uses a direct value to point to the memory location
     RegisterPointedAddress, // uses the value of the register to point to the memory location
     Register,               // Points to one of the registers
@@ -53,7 +53,7 @@ impl ArgumentType {
     fn from_u8(bytecode: u8) -> anyhow::Result<Self> {
         match bytecode {
             0 => Ok(ArgumentType::Empty),
-            1 => Ok(ArgumentType::DirectValue),
+            1 => Ok(ArgumentType::Immediate),
             2 => Ok(ArgumentType::Address),
             3 => Ok(ArgumentType::Register),
             4 => Ok(ArgumentType::RegisterPointedAddress),
@@ -190,7 +190,7 @@ impl Interpreter {
     fn read_arg(&mut self, arg: &Argument) -> u16 {
         match arg.arg_type {
             ArgumentType::Empty => panic!("Can't read from empty"),
-            ArgumentType::DirectValue => arg.value,
+            ArgumentType::Immediate => arg.value,
             ArgumentType::Address => self.sram.get(arg.value as usize).cloned().unwrap_or(0),
             ArgumentType::Register => {
                 if (arg.value as usize) >= self.registers.len() {
@@ -210,7 +210,7 @@ impl Interpreter {
     fn write_arg(&mut self, arg: &Argument, value: u16) {
         match arg.arg_type {
             ArgumentType::Empty => panic!("Can't write to empty"),
-            ArgumentType::DirectValue => {
+            ArgumentType::Immediate => {
                 panic!("Can't write to direct Value")
             }
             ArgumentType::Address => self.sram[arg.value as usize] = value,

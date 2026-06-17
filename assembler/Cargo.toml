@@ -6,4 +6,6 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.102"
 byteorder = "1"
+miette = { version = "7.6.0", features = ["fancy"] }
 simple-stopwatch = "0.1.4"
+thiserror = "2.0.18"

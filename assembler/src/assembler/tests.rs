@@ -17,7 +17,7 @@ fn test_parse_register() {
 fn test_parse_argument_types() {
     // Direct Value (#)
     let arg = Argument::parse_argument("#42").unwrap();
-    assert_eq!(arg, Argument::DirectValue(42));
+    assert_eq!(arg, Argument::Immediate(42));
     assert!(arg.is_direct_value());
 
     // Address ($#)
@@ -56,7 +56,7 @@ fn test_assemble_basic_instructions() {
     // mov *A #10
     // OpCode::Mov = 6
     // arg0: Register (*A) -> Bytecode Type: 3, Value: 0
-    // arg1: DirectValue (#10) -> Bytecode Type: 1, Value: 10
+    // arg1: Immediate (#10) -> Bytecode Type: 1, Value: 10
     // First instruction (u16): (6 << 8) | (3 << 4) | 1 = 1536 | 48 | 1 = 1585
     let source = "mov *A #10";
     let mut assembler = Assembler::new(source);
@@ -134,7 +134,7 @@ fn test_duplicate_labels_error() {
 #[test]
 fn test_invalid_argument_type_error() {
     // 'add' expects a register or address as its first argument.
-    // Providing a DirectValue (#10) will fail the validation check.
+    // Providing a Immediate (#10) will fail the validation check.
     let source = "add #10 *A";
     let mut assembler = Assembler::new(source);
     let result = assembler.assemble();

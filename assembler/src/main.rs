@@ -7,6 +7,7 @@ use simple_stopwatch::Stopwatch;
 use crate::assembler::Assembler;
 
 mod assembler;
+mod assemblererror;
 
 fn main() -> anyhow::Result<()> {
     let stopwatch = Stopwatch::start_new();
