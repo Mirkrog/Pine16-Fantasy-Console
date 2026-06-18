@@ -4,11 +4,12 @@
 ; Returns: Exit code 0 on absolute success.
 ; ===================================================
 
-test_mov: fsf gqggaf
+test_mov:
     ; Test 1: Immediate to Register, Register to Address, Immediate to Address
     Mov *A #10          ; *A = 10
     Mov $#100 *A        ; Memory[100] = 10
     Mov $#101 #2        ; Memory[101] = 2
+    Mov $#101
 
 test_add:
     ; Test 2: Add memory locations together

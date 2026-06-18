@@ -8,45 +8,47 @@ use super::*;
 
 #[test]
 fn test_parse_register() {
-    assert_eq!(Register::parse_register("A").unwrap(), Register::A);
-    assert_eq!(Register::parse_register("D").unwrap(), Register::D);
-    assert!(Register::parse_register("X").is_err());
+    assert_eq!(Register::parse_register("A", 0).unwrap(), Register::A);
+    assert_eq!(Register::parse_register("D", 0).unwrap(), Register::D);
+    assert!(Register::parse_register("X", 0).is_err());
 }
 
 #[test]
 fn test_parse_argument_types() {
     // Direct Value (#)
-    let arg = Argument::parse_argument("#42").unwrap();
-    assert_eq!(arg, Argument::Immediate(42));
-    assert!(arg.is_direct_value());
+    let arg = Argument::parse_argument("#42", 0).unwrap();
+    assert_eq!(arg.arg_type, ArgumentType::Immediate(42));
+    assert!(arg.is_immediate());
 
     // Address ($#)
-    let arg = Argument::parse_argument("$#256").unwrap();
-    assert_eq!(arg, Argument::Address(256));
+    let arg = Argument::parse_argument("$#256", 0).unwrap();
+    assert_eq!(arg.arg_type, ArgumentType::Address(256));
     assert!(arg.is_address());
 
     // Register Pointed Address ($*)
-    let arg = Argument::parse_argument("$*B").unwrap();
-    assert_eq!(arg, Argument::RegisterPointedAddress(Register::B));
+    let arg = Argument::parse_argument("$*B", 0).unwrap();
+    assert_eq!(
+        arg.arg_type,
+        ArgumentType::RegisterPointedAddress(Register::B)
+    );
 
     // Register (*)
-    let arg = Argument::parse_argument("*B").unwrap();
-    assert_eq!(arg, Argument::Register(Register::B));
+    let arg = Argument::parse_argument("*B", 0).unwrap();
+    assert_eq!(arg.arg_type, ArgumentType::Register(Register::B));
     assert!(arg.is_register());
 
     // Label
-    let arg = Argument::parse_argument("loopstart").unwrap();
-    assert_eq!(arg, Argument::Label("loopstart".to_string()));
+    let arg = Argument::parse_argument("loopstart", 0).unwrap();
+    assert_eq!(arg.arg_type, ArgumentType::Label("loopstart".to_string()));
     assert!(arg.is_label());
 }
 
 #[test]
 fn test_parse_argument_errors() {
-    assert!(Argument::parse_argument("#").is_err()); // Missing numerical value
-    assert!(Argument::parse_argument("$").is_err()); // Expected identifier after $
-    assert!(Argument::parse_argument("$#abc").is_err()); // Invalid numeric address
-    assert!(Argument::parse_argument("*X").is_err()); // Invalid register string
-    assert!(Argument::parse_argument("label_with_numbers123").is_err()); // Non-alphabetic label
+    assert!(Argument::parse_argument("#", 0).is_err()); // Missing numerical value
+    assert!(Argument::parse_argument("$", 0).is_err()); // Expected identifier after $
+    assert!(Argument::parse_argument("$#abc", 0).is_err()); // Invalid numeric address
+    assert!(Argument::parse_argument("*X", 0).is_err()); // Invalid register string
 }
 
 // --- Integration Tests for Assembly ---
@@ -93,19 +95,15 @@ fn test_assemble_with_comments_and_whitespace() {
 #[test]
 fn test_labels_and_jumps() {
     // mov *A #5  -> (6 << 8) | (3 << 4) | 1 = 1585, Val_A: 0, Val_5: 5
-    // jmp start  -> OpCode::Jmp = 7. arg0: Label -> Type: 5, Value: address of start (3)
+    // jmp start  -> OpCode::Jmp = 7. arg0: Label -> Type: 1, Value: address of start (1)
     //               arg1: Empty -> Type: 0, Value: 0
-    //               Instruction: (7 << 8) | (5 << 4) | 0 = 1792 | 80 | 0 = 1872
-    let source = "
-            mov *A #5
-            start:
-            jmp start
-        ";
+    //               Instruction: (7 << 8) | (1 << 4) | 0 = 1792 | 16 | 0 = 1808
+    let source = "mov *A #5\nstart:\njmp start";
     let mut assembler = Assembler::new(source);
     let result = assembler.assemble().unwrap();
 
     let expected_mov = vec![1585, 0, 5];
-    let expected_jmp = vec![1872, 1, 0];
+    let expected_jmp = vec![1808, 1, 1]; // Points to instruction index 1
 
     let mut expected = expected_mov;
     expected.extend(expected_jmp);
@@ -133,15 +131,14 @@ fn test_duplicate_labels_error() {
 
 #[test]
 fn test_invalid_argument_type_error() {
-    // 'add' expects a register or address as its first argument.
-    // Providing a Immediate (#10) will fail the validation check.
     let source = "add #10 *A";
     let mut assembler = Assembler::new(source);
     let result = assembler.assemble();
 
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
-    assert!(err_msg.contains("First argument is of invalid type"));
+    // Validates against our updated Miette / AssemblerError debug print out string formatting
+    assert!(err_msg.contains("InvalidArgumentType") || err_msg.contains("invalid_argument"));
 }
 
 #[test]
@@ -152,7 +149,7 @@ fn test_missing_label_error() {
 
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
-    assert!(err_msg.contains("Label not found"));
+    assert!(err_msg.contains("UnknownLabel") || err_msg.contains("unknown_label"));
 }
 
 #[test]

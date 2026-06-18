@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use miette::SourceSpan;
 
-use crate::assemblererror::AssemblerError;
+use crate::assemblererror::{AssemblerError, AssemblerErrors};
 
 #[repr(u8)]
 #[non_exhaustive]
@@ -201,12 +201,14 @@ impl Argument {
 pub struct Assembler<'a> {
     source: &'a str,
     labels: HashMap<String, u16>,
+    errors: Vec<AssemblerError>,
 }
 impl<'a> Assembler<'a> {
     pub fn new(source: &'a str) -> Self {
         Self {
             source,
             labels: HashMap::new(),
+            errors: Vec::new(),
         }
     }
     pub fn assemble(&mut self) -> anyhow::Result<Vec<u16>> {
@@ -221,9 +223,7 @@ impl<'a> Assembler<'a> {
 
         for instruction in self.source.lines() {
             let trimmed = match instruction.trim().split(';').next() {
-                None | Some("") => {
-                    continue;
-                }
+                None | Some("") => continue,
                 Some(trimmed) => trimmed,
             };
 
@@ -233,12 +233,20 @@ impl<'a> Assembler<'a> {
                     assembly.extend_from_slice(&bytecode);
                 }
                 Err(e) => {
-                    anyhow::bail!(
-                        "{:?}",
-                        miette::Report::new(e).with_source_code(self.source.to_string())
-                    );
+                    self.errors.push(e);
                 }
             }
+        }
+
+        if !self.errors.is_empty() {
+            let combined_error = AssemblerErrors {
+                related: self.errors.drain(..).collect(),
+            };
+
+            let report =
+                miette::Report::new(combined_error).with_source_code(self.source.to_string());
+
+            anyhow::bail!("{:?}", report);
         }
 
         Ok(assembly)
