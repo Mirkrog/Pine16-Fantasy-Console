@@ -1,13 +1,6 @@
 use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 
-#[derive(Debug, Error, Diagnostic)]
-#[error("Assembly failed with {} error(s)", related.len())]
-pub struct AssemblerErrors {
-    #[related]
-    pub related: Vec<AssemblerError>,
-}
-
 #[derive(Error, Debug, Diagnostic)]
 pub enum AssemblerError {
     #[error("Expected End Of Line")]
@@ -81,5 +74,19 @@ pub enum AssemblerError {
         argument_number: usize,
         #[label("this opcode expects {argument_number} argument(s)")]
         span: SourceSpan,
+    },
+    #[error("Argument Missing Value")]
+    #[diagnostic(code(assembler::argument_missing_value))]
+    ArgumentMissingValue {
+        #[label("this argument has no value")]
+        span: SourceSpan,
+    },
+    #[error("Label Defined Multiple Times")]
+    #[diagnostic(code(assembler::label_defined_multiple_times))]
+    LabelDefinedMultipleTimes {
+        #[label("here argument is defined first")]
+        span: SourceSpan,
+        #[label("here argument is defined again")]
+        span1: SourceSpan,
     },
 }

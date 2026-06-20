@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use miette::SourceSpan;
+use miette::{NamedSource, SourceSpan};
 
-use crate::assemblererror::{AssemblerError, AssemblerErrors};
+use crate::assemblererror::AssemblerError;
 
 #[repr(u8)]
 #[non_exhaustive]
@@ -90,6 +90,11 @@ impl Argument {
 
     pub fn parse_argument(string: &str, file_byte_index: usize) -> Result<Self, AssemblerError> {
         let (identifier, value) = string.split_at(1);
+        if value.is_empty() {
+            return Err(AssemblerError::ArgumentMissingValue {
+                span: SourceSpan::new((file_byte_index + 1).into(), 1),
+            });
+        }
 
         let arg_type = match identifier {
             "#" => ArgumentType::Immediate(value.parse::<u16>().map_err(|e| {
@@ -214,12 +219,7 @@ impl<'a> Assembler<'a> {
     pub fn assemble(&mut self) -> anyhow::Result<Vec<u16>> {
         let mut assembly: Vec<u16> = Vec::new();
 
-        match self.assemble_prepass() {
-            Ok(_) => {}
-            Err(e) => {
-                panic!("{}", e)
-            }
-        }
+        self.assemble_prepass();
 
         for instruction in self.source.lines() {
             let trimmed = match instruction.trim().split(';').next() {
@@ -239,54 +239,71 @@ impl<'a> Assembler<'a> {
         }
 
         if !self.errors.is_empty() {
-            let combined_error = AssemblerErrors {
-                related: self.errors.drain(..).collect(),
-            };
+            let error_count = self.errors.len();
+            for error in self.errors.drain(..) {
+                println!(
+                    "{:?}",
+                    miette::Report::new(error).with_source_code(NamedSource::new(
+                        "src/test.v16.asm",
+                        self.source.to_string()
+                    ))
+                );
+            }
 
-            let report =
-                miette::Report::new(combined_error).with_source_code(self.source.to_string());
-
-            anyhow::bail!("{:?}", report);
+            anyhow::bail!("Could not assemble _ due to {error_count} error(s)");
         }
 
         Ok(assembly)
     }
     /// This is where we search for all the labels and store their locations
-    fn assemble_prepass(&mut self) -> anyhow::Result<()> {
+    fn assemble_prepass(&mut self) {
+        let mut label_strs: Vec<&str> = Vec::new();
+        let source_start_ptr = self.source.as_ptr() as usize;
         let mut instruction_index = 0;
-        for (index, instruction) in self.source.lines().enumerate() {
+
+        for instruction in self.source.lines() {
             let instruction = match instruction.split(';').next() {
                 None => {
                     continue;
                 }
                 Some(instruction) => {
                     let trimmed = instruction.trim();
-                    if trimmed.trim().is_empty() {
+                    if trimmed.is_empty() {
                         continue;
                     }
                     trimmed
                 }
             };
             if instruction.ends_with(':') {
-                match self
-                    .labels
-                    .insert(instruction.replace(':', ""), instruction_index)
-                {
-                    None => continue,
-                    Some(old) => {
-                        anyhow::bail!(
-                            "Label '{}' defined twice at lines ({}, {})",
-                            instruction.replace(':', ""),
-                            old + 1,
-                            index + 1
-                        )
+                let trimmed_instruction = instruction.replace(':', "");
+                match self.labels.insert(trimmed_instruction, instruction_index) {
+                    None => {
+                        label_strs.push(instruction);
+                    }
+                    Some(_) => {
+                        println!("{}, {:?}, {:?}", instruction, label_strs, self.labels);
+                        self.errors.push(AssemblerError::LabelDefinedMultipleTimes {
+                            span: SourceSpan::new(
+                                ((label_strs
+                                    .iter()
+                                    .find(|s| s.contains(instruction))
+                                    .unwrap()
+                                    .as_ptr() as usize)
+                                    - source_start_ptr)
+                                    .into(),
+                                instruction.len(),
+                            ),
+                            span1: SourceSpan::new(
+                                ((instruction.as_ptr() as usize) - source_start_ptr).into(),
+                                instruction.len(),
+                            ),
+                        });
                     }
                 }
             } else {
                 instruction_index += 1;
             }
         }
-        Ok(())
     }
     /// Actually creating the output assembly
     fn assemble_instruction(
@@ -326,25 +343,21 @@ impl<'a> Assembler<'a> {
             });
         }
 
-        let arg1 = if let arg1_token = tokens.next()
-            && arg1_token.is_some()
-        {
-            Argument::parse_argument(
-                arg1_token.unwrap(),
-                arg1_token.unwrap().as_ptr() as usize - source_start_ptr - 1,
-            )?
-        } else {
-            Argument::empty(instruction.as_ptr() as usize - source_start_ptr + instruction.len())
+        let arg1 = match tokens.next() {
+            Some(token) => {
+                Argument::parse_argument(token, token.as_ptr() as usize - source_start_ptr - 1)?
+            }
+            None => Argument::empty(
+                instruction.as_ptr() as usize - source_start_ptr + instruction.len(),
+            ),
         };
-        let arg2 = if let arg2_token = tokens.next()
-            && arg2_token.is_some()
-        {
-            Argument::parse_argument(
-                arg2_token.unwrap(),
-                arg2_token.unwrap().as_ptr() as usize - source_start_ptr - 1,
-            )?
-        } else {
-            Argument::empty(instruction.as_ptr() as usize - source_start_ptr + instruction.len())
+        let arg2 = match tokens.next() {
+            Some(token) => {
+                Argument::parse_argument(token, token.as_ptr() as usize - source_start_ptr - 1)?
+            }
+            None => Argument::empty(
+                instruction.as_ptr() as usize - source_start_ptr + instruction.len(),
+            ),
         };
 
         Ok(Some(match opcode {
