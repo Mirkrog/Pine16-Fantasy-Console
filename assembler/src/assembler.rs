@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::identity};
 
 use miette::{NamedSource, SourceSpan};
 
@@ -7,6 +7,7 @@ use crate::assemblererror::AssemblerError;
 #[repr(u8)]
 #[non_exhaustive]
 enum OpCode {
+    NoOp,
     Add,
     Sub,
     Mul,
@@ -90,7 +91,7 @@ impl Argument {
 
     pub fn parse_argument(string: &str, file_byte_index: usize) -> Result<Self, AssemblerError> {
         let (identifier, value) = string.split_at(1);
-        if value.is_empty() {
+        if value.is_empty() && !identifier.starts_with(|c: char| c.is_alphabetic()) {
             return Err(AssemblerError::ArgumentMissingValue {
                 span: SourceSpan::new((file_byte_index + 1).into(), 1),
             });
@@ -121,14 +122,14 @@ impl Argument {
                     other => {
                         return Err(AssemblerError::UnknownAddressType {
                             address: other.to_string(),
-                            span: SourceSpan::new((file_byte_index + 1).into(), 1),
+                            span: SourceSpan::new(file_byte_index.into(), 1),
                         });
                     }
                 }
             }
             "*" => ArgumentType::Register(Register::parse_register(value, file_byte_index + 1)?),
             other => {
-                if !other.is_empty() && identifier.starts_with(|c: char| c.is_alphabetic()) {
+                if identifier.starts_with(|c: char| c.is_alphabetic()) {
                     ArgumentType::Label(string.to_string())
                 } else {
                     return Err(AssemblerError::UnknownArgumentPrefix {
@@ -169,7 +170,7 @@ impl Argument {
                     .copied()
                     .ok_or(AssemblerError::UnknownLabel {
                         label: value.to_string(),
-                        span: SourceSpan::new((self.file_byte_index + 1).into(), self.len_bytes),
+                        span: SourceSpan::new(self.file_byte_index.into(), self.len_bytes),
                     })
             }
         }
@@ -228,12 +229,9 @@ impl<'a> Assembler<'a> {
             };
 
             match self.assemble_instruction(trimmed) {
-                Ok(None) => continue,
-                Ok(Some(bytecode)) => {
+                None => continue,
+                Some(bytecode) => {
                     assembly.extend_from_slice(&bytecode);
-                }
-                Err(e) => {
-                    self.errors.push(e);
                 }
             }
         }
@@ -306,24 +304,22 @@ impl<'a> Assembler<'a> {
         }
     }
     /// Actually creating the output assembly
-    fn assemble_instruction(
-        &mut self,
-        instruction: &str,
-    ) -> Result<Option<[u16; 3]>, AssemblerError> {
+    fn assemble_instruction(&mut self, instruction: &str) -> Option<[u16; 3]> {
         let source_start_ptr = self.source.as_ptr() as usize;
 
         if instruction.contains(':') {
             if instruction.ends_with(':') {
-                return Ok(None); // We early return when it is a flag
+                return None; // We early return when it is a flag
             } else {
                 let label_str = instruction.split_whitespace().next().unwrap();
-                return Err(AssemblerError::ExpectedNewline {
+                self.errors.push(AssemblerError::ExpectedNewline {
                     span: SourceSpan::new(
                         (label_str.as_ptr() as usize - source_start_ptr + label_str.len() + 1)
                             .into(),
                         instruction.len() - label_str.len() - 1,
                     ),
                 });
+                return None;
             }
         }
         let mut tokens = instruction.split_whitespace();
@@ -332,10 +328,14 @@ impl<'a> Assembler<'a> {
         let opcode = OpCode::from_str(
             opcode_token.to_lowercase().as_str(),
             opcode_token.as_ptr() as usize - source_start_ptr,
-        )?;
+        )
+        .unwrap_or_else(|e| {
+            self.errors.push(e);
+            OpCode::NoOp
+        });
 
         if instruction.split_whitespace().collect::<Vec<&str>>().len() > 3 {
-            return Err(AssemblerError::TooManyArguments {
+            self.errors.push(AssemblerError::TooManyArguments {
                 span: SourceSpan::new(
                     (opcode_token.as_ptr() as usize).into(),
                     instruction.len() - opcode_token.as_ptr() as usize - source_start_ptr,
@@ -343,9 +343,17 @@ impl<'a> Assembler<'a> {
             });
         }
 
+        // this looks very messy but its just turning faliure states into default values so that we can
+        // have multiple errors in one line without it falling appart down the road
         let arg1 = match tokens.next() {
             Some(token) => {
-                Argument::parse_argument(token, token.as_ptr() as usize - source_start_ptr - 1)?
+                match Argument::parse_argument(token, token.as_ptr() as usize - source_start_ptr) {
+                    Ok(arg) => arg,
+                    Err(e) => {
+                        self.errors.push(e);
+                        return Some([0; 3]); // we return NoOp
+                    }
+                }
             }
             None => Argument::empty(
                 instruction.as_ptr() as usize - source_start_ptr + instruction.len(),
@@ -353,47 +361,56 @@ impl<'a> Assembler<'a> {
         };
         let arg2 = match tokens.next() {
             Some(token) => {
-                Argument::parse_argument(token, token.as_ptr() as usize - source_start_ptr - 1)?
+                match Argument::parse_argument(token, token.as_ptr() as usize - source_start_ptr) {
+                    Ok(arg) => arg,
+                    Err(e) => {
+                        self.errors.push(e);
+                        return Some([0; 3]); // we return NoOp
+                    }
+                }
             }
             None => Argument::empty(
                 instruction.as_ptr() as usize - source_start_ptr + instruction.len(),
             ),
         };
 
-        Ok(Some(match opcode {
+        Some(match opcode {
+            OpCode::NoOp => {
+                self.convert_to_bytecode(opcode, arg1, arg2, Some(|_| true), Some(|_| true))
+            }
             OpCode::Add => self.convert_to_bytecode(
                 opcode,
                 arg1,
                 arg2,
                 Some(|arg| arg.is_writable()),
                 Some(|arg| arg.is_readable()),
-            )?,
+            ),
             OpCode::Sub => self.convert_to_bytecode(
                 opcode,
                 arg1,
                 arg2,
                 Some(|arg| arg.is_writable()),
                 Some(|arg| arg.is_readable()),
-            )?,
+            ),
             OpCode::Mul => self.convert_to_bytecode(
                 opcode,
                 arg1,
                 arg2,
                 Some(|arg| arg.is_writable()),
                 Some(|arg| arg.is_readable()),
-            )?,
+            ),
             OpCode::Div => self.convert_to_bytecode(
                 opcode,
                 arg1,
                 arg2,
                 Some(|arg| arg.is_writable()),
                 Some(|arg| arg.is_readable()),
-            )?,
+            ),
             OpCode::Exit => {
-                self.convert_to_bytecode(opcode, arg1, arg2, Some(|arg| arg.is_readable()), None)?
+                self.convert_to_bytecode(opcode, arg1, arg2, Some(|arg| arg.is_readable()), None)
             }
             OpCode::Stall => {
-                self.convert_to_bytecode(opcode, arg1, arg2, Some(|arg| arg.is_readable()), None)?
+                self.convert_to_bytecode(opcode, arg1, arg2, Some(|arg| arg.is_readable()), None)
             }
             OpCode::Mov => self.convert_to_bytecode(
                 opcode,
@@ -401,9 +418,9 @@ impl<'a> Assembler<'a> {
                 arg2,
                 Some(|arg| arg.is_writable()),
                 Some(|arg| arg.is_readable()),
-            )?,
+            ),
             OpCode::Jmp => {
-                self.convert_to_bytecode(opcode, arg1, arg2, Some(|arg| arg.is_label()), None)?
+                self.convert_to_bytecode(opcode, arg1, arg2, Some(|arg| arg.is_label()), None)
             }
             OpCode::Jeq => self.convert_to_bytecode(
                 opcode,
@@ -411,15 +428,15 @@ impl<'a> Assembler<'a> {
                 arg2,
                 Some(|arg| arg.is_label()),
                 Some(|arg| arg.is_readable()),
-            )?,
+            ),
             OpCode::Jne => self.convert_to_bytecode(
                 opcode,
                 arg1,
                 arg2,
                 Some(|arg| arg.is_label()),
                 Some(|arg| arg.is_readable()),
-            )?,
-        }))
+            ),
+        })
     }
     fn convert_to_bytecode(
         &mut self,
@@ -428,17 +445,17 @@ impl<'a> Assembler<'a> {
         arg2: Argument,
         first_filter: Option<fn(&Argument) -> bool>,
         second_filter: Option<fn(&Argument) -> bool>,
-    ) -> Result<[u16; 3], AssemblerError> {
+    ) -> [u16; 3] {
         if let Some(is_valid) = first_filter
             && !is_valid(&arg1)
         {
             if !arg1.is_empty() {
-                return Err(AssemblerError::InvalidArgumentType {
+                self.errors.push(AssemblerError::InvalidArgumentType {
                     arg: arg1.arg_type.clone(),
                     span: SourceSpan::new(arg1.file_byte_index.into(), arg1.len_bytes),
                 });
             } else {
-                return Err(AssemblerError::MissingRequiredArgument {
+                self.errors.push(AssemblerError::MissingRequiredArgument {
                     argument_number: 1,
                     span: SourceSpan::new(arg1.file_byte_index.into(), arg1.len_bytes),
                 });
@@ -449,12 +466,12 @@ impl<'a> Assembler<'a> {
             && !is_valid(&arg2)
         {
             if !arg2.is_empty() {
-                return Err(AssemblerError::InvalidArgumentType {
+                self.errors.push(AssemblerError::InvalidArgumentType {
                     arg: arg2.arg_type.clone(),
                     span: SourceSpan::new(arg2.file_byte_index.into(), arg2.len_bytes),
                 });
             } else {
-                return Err(AssemblerError::MissingRequiredArgument {
+                self.errors.push(AssemblerError::MissingRequiredArgument {
                     argument_number: 2,
                     span: SourceSpan::new(arg2.file_byte_index.into(), arg2.len_bytes),
                 });
@@ -464,11 +481,20 @@ impl<'a> Assembler<'a> {
         let arg1_type_bc = arg1.as_bytecode();
         let arg2_type_bc = arg2.as_bytecode();
 
-        Ok([
+        // very readable :D
+        [
             ((opcode as u16) << 8) | (arg1_type_bc << 4) | arg2_type_bc,
-            arg1.value_as_bytecode(&self.labels)?,
-            arg2.value_as_bytecode(&self.labels)?,
-        ])
+            arg1.value_as_bytecode(&self.labels)
+                .unwrap_or_else(|e| -> u16 {
+                    self.errors.push(e);
+                    0
+                }),
+            arg2.value_as_bytecode(&self.labels)
+                .unwrap_or_else(|e| -> u16 {
+                    self.errors.push(e);
+                    0
+                }),
+        ]
     }
 }
 

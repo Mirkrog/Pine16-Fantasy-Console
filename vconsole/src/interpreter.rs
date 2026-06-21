@@ -9,6 +9,7 @@ use std::{
 #[repr(u8)]
 #[derive(PartialEq, Eq, Debug)]
 enum OpCode {
+    NoOp,
     Add,
     Sub,
     Mul,
@@ -136,6 +137,7 @@ impl Interpreter {
             let instruction = self.parse_next_instruction();
             println!("{:?}", instruction);
             match instruction.opcode {
+                OpCode::NoOp => {}
                 OpCode::Add => {
                     let val1 = self.read_arg(&instruction.arg1);
                     let val2 = self.read_arg(&instruction.arg2);

@@ -3,7 +3,7 @@ use thiserror::Error;
 
 #[derive(Error, Debug, Diagnostic)]
 pub enum AssemblerError {
-    #[error("Expected End Of Line")]
+    #[error("Expected New Line")]
     #[diagnostic(
         code(assembler::expected_newline),
         help("You might have forgotten a `;`")
