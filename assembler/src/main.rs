@@ -1,19 +1,36 @@
-use std::{fs::File, io::Write};
-
-use anyhow::Ok;
 use byteorder::{LittleEndian, WriteBytesExt};
+use colored::Colorize;
 use simple_stopwatch::Stopwatch;
-
-use crate::assembler::Assembler;
+use std::{fs::File, io::Write};
 
 mod assembler;
 mod assemblererror;
 
-fn main() -> anyhow::Result<()> {
-    let stopwatch = Stopwatch::start_new();
-    let assembly = Assembler::new(include_str!("test.v16.asm")).assemble()?;
+use assembler::Assembler;
 
-    let mut out_file = File::create("test.v16.o")?;
+fn main() {
+    let stopwatch = Stopwatch::start_new();
+
+    // 1. Catch the result of assemble() manually
+    let assembly = match Assembler::new(include_str!("test.v16.asm")).assemble() {
+        Ok(data) => data,
+        Err(err) => {
+            eprintln!("{} {}", "Error:".red().bold(), err);
+            std::process::exit(1);
+        }
+    };
+
+    let mut out_file = match File::create("test.v16.o") {
+        Ok(file) => file,
+        Err(err) => {
+            eprintln!(
+                "{} Failed to create output file: {:?}",
+                "Error:".red().bold(),
+                err
+            );
+            std::process::exit(1);
+        }
+    };
 
     let mut buffer = [0u8; 20];
     buffer[..17].copy_from_slice("V16ASSEMBLYCODE:D".as_bytes());
@@ -24,9 +41,8 @@ fn main() -> anyhow::Result<()> {
     out_file.write_all(&buffer).unwrap();
 
     for bytepair in assembly {
-        out_file.write_u16::<LittleEndian>(bytepair)?
+        out_file.write_u16::<LittleEndian>(bytepair).unwrap();
     }
 
     println!("Finished assembling in: {}s", stopwatch.s());
-    Ok(())
 }

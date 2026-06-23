@@ -1,4 +1,4 @@
-use std::{collections::HashMap, convert::identity};
+use std::collections::HashMap;
 
 use miette::{NamedSource, SourceSpan};
 
@@ -56,7 +56,7 @@ impl Register {
             "D" => Ok(Self::D),
             other => Err(AssemblerError::UnknownRegister {
                 register: other.to_string(),
-                span: SourceSpan::new(file_byte_index.into(), 1),
+                span: SourceSpan::new(file_byte_index.into(), other.len()),
             }),
         }
     }
@@ -122,19 +122,22 @@ impl Argument {
                     other => {
                         return Err(AssemblerError::UnknownAddressType {
                             address: other.to_string(),
-                            span: SourceSpan::new(file_byte_index.into(), 1),
+                            span: SourceSpan::new(file_byte_index.into(), other.len()),
                         });
                     }
                 }
             }
-            "*" => ArgumentType::Register(Register::parse_register(value, file_byte_index + 1)?),
+            "*" => ArgumentType::Register(Register::parse_register(
+                value,
+                file_byte_index + identifier.len(),
+            )?),
             other => {
                 if identifier.starts_with(|c: char| c.is_alphabetic()) {
                     ArgumentType::Label(string.to_string())
                 } else {
                     return Err(AssemblerError::UnknownArgumentPrefix {
                         argument_prefix: other.split_at(1).0.to_string(),
-                        span: SourceSpan::new(file_byte_index.into(), 1),
+                        span: SourceSpan::new(file_byte_index.into(), other.len()),
                     });
                 }
             }
@@ -217,7 +220,7 @@ impl<'a> Assembler<'a> {
             errors: Vec::new(),
         }
     }
-    pub fn assemble(&mut self) -> anyhow::Result<Vec<u16>> {
+    pub fn assemble(&mut self) -> Result<Vec<u16>, String> {
         let mut assembly: Vec<u16> = Vec::new();
 
         self.assemble_prepass();
@@ -248,7 +251,9 @@ impl<'a> Assembler<'a> {
                 );
             }
 
-            anyhow::bail!("Could not assemble _ due to {error_count} error(s)");
+            return Err(format!(
+                "Could not assemble _ due to {error_count} error(s)"
+            ));
         }
 
         Ok(assembly)
