@@ -15,7 +15,7 @@ fn main() {
     let assembly = match Assembler::new(include_str!("test.v16.asm")).assemble() {
         Ok(data) => data,
         Err(err) => {
-            eprintln!("{} {}", "Error:".red().bold(), err);
+            eprintln!("{}: {err}", "error".red().bold());
             std::process::exit(1);
         }
     };
@@ -24,8 +24,8 @@ fn main() {
         Ok(file) => file,
         Err(err) => {
             eprintln!(
-                "{} Failed to create output file: {:?}",
-                "Error:".red().bold(),
+                "{}: Failed to create output file: {:?}",
+                "error".red().bold(),
                 err
             );
             std::process::exit(1);
@@ -44,5 +44,9 @@ fn main() {
         out_file.write_u16::<LittleEndian>(bytepair).unwrap();
     }
 
-    println!("Finished assembling in: {}s", stopwatch.s());
+    println!(
+        "{} assembling in: {}s",
+        "Finished".green().bold(),
+        stopwatch.s()
+    );
 }

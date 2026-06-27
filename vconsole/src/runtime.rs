@@ -24,18 +24,19 @@ enum OpCode {
 impl OpCode {
     fn from_u8(bytecode: u8) -> anyhow::Result<Self> {
         match bytecode {
-            0 => Ok(OpCode::Add),
-            1 => Ok(OpCode::Sub),
-            2 => Ok(OpCode::Mul),
-            3 => Ok(OpCode::Div),
-            4 => Ok(OpCode::Exit),
-            5 => Ok(OpCode::Stall),
-            6 => Ok(OpCode::Mov),
-            7 => Ok(OpCode::Jmp),
-            8 => Ok(OpCode::Jeq),
-            9 => Ok(OpCode::Jne),
+            0 => Ok(OpCode::NoOp),
+            1 => Ok(OpCode::Add),
+            2 => Ok(OpCode::Sub),
+            3 => Ok(OpCode::Mul),
+            4 => Ok(OpCode::Div),
+            5 => Ok(OpCode::Exit),
+            6 => Ok(OpCode::Stall),
+            7 => Ok(OpCode::Mov),
+            8 => Ok(OpCode::Jmp),
+            9 => Ok(OpCode::Jeq),
+            10 => Ok(OpCode::Jne),
             other => {
-                anyhow::bail!("Unknown OpCode: {}  (0 - 7)", other)
+                anyhow::bail!("Unknown OpCode: {other}")
             }
         }
     }
@@ -103,22 +104,20 @@ enum VersionMatchType {
     Incompatible, // The Mayor or Minor Version doesn't match
 }
 
-pub struct Interpreter {
+pub struct Runtime {
     rom: Vec<u16>,
     sram: Vec<u16>,
-    sram_size: usize,
     program_ptr: u32,
     stall_timer: u16,
     exit_code: u16,
     registers: [u16; 4],
 }
 
-impl Interpreter {
+impl Runtime {
     pub fn new(sram_size: usize) -> Self {
         Self {
             rom: Vec::new(),
             sram: vec![0; sram_size],
-            sram_size,
             program_ptr: 0,
             stall_timer: 0,
             exit_code: 0,
@@ -126,37 +125,35 @@ impl Interpreter {
         }
     }
     pub fn default() -> Self {
-        Self::new(128 * 1000)
+        Self::new(64 * 1000)
     }
     pub fn run(&mut self) {
         loop {
+            // we just skip the current cpu cycle, not clean but works :D
             if self.stall_timer > 0 {
                 self.stall_timer -= 1;
                 continue;
             }
+
             let instruction = self.parse_next_instruction();
-            println!("{:?}", instruction);
+
+            let mut jumped = false;
+
             match instruction.opcode {
                 OpCode::NoOp => {}
-                OpCode::Add => {
+                OpCode::Add | OpCode::Sub | OpCode::Mul | OpCode::Div => {
                     let val1 = self.read_arg(&instruction.arg1);
                     let val2 = self.read_arg(&instruction.arg2);
-                    self.write_arg(&instruction.arg1, val1.wrapping_add(val2));
-                }
-                OpCode::Sub => {
-                    let val1 = self.read_arg(&instruction.arg1);
-                    let val2 = self.read_arg(&instruction.arg2);
-                    self.write_arg(&instruction.arg1, val1.wrapping_sub(val2));
-                }
-                OpCode::Mul => {
-                    let val1 = self.read_arg(&instruction.arg1);
-                    let val2 = self.read_arg(&instruction.arg2);
-                    self.write_arg(&instruction.arg1, val1.wrapping_mul(val2));
-                }
-                OpCode::Div => {
-                    let val1 = self.read_arg(&instruction.arg1);
-                    let val2 = self.read_arg(&instruction.arg2);
-                    self.write_arg(&instruction.arg1, val1.wrapping_div(val2));
+
+                    let result = match instruction.opcode {
+                        OpCode::Add => val1.wrapping_add(val2),
+                        OpCode::Sub => val1.wrapping_sub(val2),
+                        OpCode::Mul => val1.wrapping_mul(val2),
+                        OpCode::Div => val1.wrapping_div(val2),
+                        _ => unreachable!(),
+                    };
+
+                    self.write_arg(&instruction.arg1, result);
                 }
                 OpCode::Stall => self.stall_timer = self.read_arg(&instruction.arg1),
                 OpCode::Exit => {
@@ -165,23 +162,32 @@ impl Interpreter {
                 }
                 // TODO: add longjumps
                 // we have to jump to the address - 1 because the program_pointer is incremented after this
-                OpCode::Jmp => self.program_ptr = self.read_arg(&instruction.arg1) as u32 - 1,
+                OpCode::Jmp => {
+                    self.program_ptr = self.read_arg(&instruction.arg1) as u32;
+                    jumped = true;
+                }
+
                 OpCode::Mov => {
                     let val2 = self.read_arg(&instruction.arg2);
                     self.write_arg(&instruction.arg1, val2);
                 }
                 OpCode::Jeq => {
                     if self.read_arg(&instruction.arg2) == 0 {
-                        self.program_ptr = self.read_arg(&instruction.arg1) as u32 - 1
+                        self.program_ptr = self.read_arg(&instruction.arg1) as u32;
+                        jumped = true;
                     }
                 }
                 OpCode::Jne => {
                     if self.read_arg(&instruction.arg2) != 0 {
-                        self.program_ptr = self.read_arg(&instruction.arg1) as u32 - 1
+                        self.program_ptr = self.read_arg(&instruction.arg1) as u32;
+                        jumped = true;
                     }
                 }
             }
-            self.program_ptr += 1;
+            if !jumped {
+                self.program_ptr += 1;
+            }
+            // check if we reached the end of the program
             if self.program_ptr as usize >= self.rom.len() / 3 {
                 self.exit_code = 0;
                 break;
@@ -193,7 +199,7 @@ impl Interpreter {
         match arg.arg_type {
             ArgumentType::Empty => panic!("Can't read from empty"),
             ArgumentType::Immediate => arg.value,
-            ArgumentType::Address => self.sram.get(arg.value as usize).cloned().unwrap_or(0),
+            ArgumentType::Address => self.read_ram(arg.value),
             ArgumentType::Register => {
                 if (arg.value as usize) >= self.registers.len() {
                     panic!("Register address out of bounds: {}", arg.value)
@@ -205,7 +211,7 @@ impl Interpreter {
                     panic!("Register address out of bounds: {}", arg.value)
                 }
                 let register = self.registers[arg.value as usize];
-                self.sram.get(register as usize).cloned().unwrap_or(0)
+                self.read_ram(register)
             }
         }
     }
@@ -213,9 +219,9 @@ impl Interpreter {
         match arg.arg_type {
             ArgumentType::Empty => panic!("Can't write to empty"),
             ArgumentType::Immediate => {
-                panic!("Can't write to direct Value")
+                panic!("Can't write to Immediate")
             }
-            ArgumentType::Address => self.sram[arg.value as usize] = value,
+            ArgumentType::Address => self.write_ram(arg.value, value),
             ArgumentType::Register => {
                 if (arg.value as usize) >= self.registers.len() {
                     panic!("Register address out of bounds: {}", arg.value)
@@ -227,9 +233,15 @@ impl Interpreter {
                     panic!("Register address out of bounds: {}", arg.value)
                 }
                 let register = self.registers[arg.value as usize];
-                self.sram[register as usize] = value
+                self.write_ram(register, value)
             }
         }
+    }
+    pub fn read_ram(&mut self, address: u16) -> u16 {
+        self.sram.get(address as usize).cloned().unwrap_or(0)
+    }
+    pub fn write_ram(&mut self, address: u16, value: u16) {
+        self.sram[address as usize] = value
     }
     pub fn parse_next_instruction(&mut self) -> Instruction {
         Instruction::from_u16(
@@ -258,11 +270,15 @@ impl Interpreter {
         match compare_version(version_bytes) {
             VersionMatchType::Full => {}
             VersionMatchType::Partial => {
-                println!("Warning Rom is only partially compatible")
+                println!(
+                    "Rom is only partially compatible (console_ver: {}, bin_ver: {:?})",
+                    env!("CARGO_PKG_VERSION"),
+                    version_bytes
+                )
             }
             VersionMatchType::Incompatible => {
                 panic!(
-                    "Rom is not compatible console_ver: {}, bin_ver: {:?}",
+                    "Rom is not compatible (console_ver: {}, bin_ver: {:?})",
                     env!("CARGO_PKG_VERSION"),
                     version_bytes
                 )
@@ -283,6 +299,7 @@ impl Interpreter {
     }
 }
 
+/// Compares the version of a binary with the version of the console
 fn compare_version(version_bytes: [u8; 3]) -> VersionMatchType {
     let mayor_version = env!("CARGO_PKG_VERSION_MAJOR").parse::<u8>().unwrap();
     let minor_version = env!("CARGO_PKG_VERSION_MINOR").parse::<u8>().unwrap();

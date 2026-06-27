@@ -22,6 +22,7 @@ enum OpCode {
 impl OpCode {
     fn from_str(string: &str, file_byte_index: usize) -> Result<Self, AssemblerError> {
         match string {
+            "noop" => Ok(OpCode::NoOp),
             "add" => Ok(OpCode::Add),
             "sub" => Ok(OpCode::Sub),
             "mul" => Ok(OpCode::Mul),
@@ -189,9 +190,6 @@ impl Argument {
     }
     pub fn is_immediate_address(&self) -> bool {
         matches!(self.arg_type, ArgumentType::Address(_))
-    }
-    pub fn is_immediate(&self) -> bool {
-        matches!(self.arg_type, ArgumentType::Immediate(_))
     }
     pub fn is_register(&self) -> bool {
         matches!(self.arg_type, ArgumentType::Register(_))

@@ -1,16 +1,16 @@
 use std::process;
 
-use crate::interpreter::Interpreter;
+use crate::runtime::Runtime;
 
-mod interpreter;
+mod runtime;
 
 fn main() -> anyhow::Result<()> {
-    let mut interpreter = Interpreter::default();
+    let mut interpreter = Runtime::default();
 
     process::Command::new("cargo")
         .args(["run", "-p", "assembler"])
         .spawn()
-        .expect("Command failed to start")
+        .unwrap()
         .wait()
         .unwrap();
 
