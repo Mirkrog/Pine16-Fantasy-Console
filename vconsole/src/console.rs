@@ -1,4 +1,5 @@
 use byteorder::{LittleEndian, ReadBytesExt};
+use simple_stopwatch::Stopwatch;
 
 use std::{
     fs::File,
@@ -104,7 +105,7 @@ enum VersionMatchType {
     Incompatible, // The Mayor or Minor Version doesn't match
 }
 
-pub struct Runtime {
+pub struct Console {
     rom: Vec<u16>,
     sram: Vec<u16>,
     program_ptr: u32,
@@ -113,7 +114,7 @@ pub struct Runtime {
     registers: [u16; 4],
 }
 
-impl Runtime {
+impl Console {
     pub fn new(sram_size: usize) -> Self {
         Self {
             rom: Vec::new(),
@@ -255,6 +256,8 @@ impl Runtime {
         .unwrap()
     }
     pub fn load_rom_from_path(&mut self, path: &str) -> anyhow::Result<()> {
+        let watch = Stopwatch::start_new();
+
         let file = File::open(path)?;
         let metadata = file.metadata()?;
         let file_size_bytes = metadata.len();
@@ -294,12 +297,12 @@ impl Runtime {
             });
         }
 
-        println!("Done loading Rom");
+        println!("Loaded ROM in: {}s", watch.s());
         Ok(())
     }
 }
 
-/// Compares the version of a binary with the version of the console
+/// Compares version bytes with the version of the console
 fn compare_version(version_bytes: [u8; 3]) -> VersionMatchType {
     let mayor_version = env!("CARGO_PKG_VERSION_MAJOR").parse::<u8>().unwrap();
     let minor_version = env!("CARGO_PKG_VERSION_MINOR").parse::<u8>().unwrap();

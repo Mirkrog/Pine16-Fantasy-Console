@@ -188,6 +188,10 @@ impl Argument {
     pub fn is_writable(&self) -> bool {
         self.is_address() || self.is_register()
     }
+    #[allow(unused)] // checking for immediates is rarely useful, but for completeness ;)
+    pub fn is_immediate(&self) -> bool {
+        matches!(self.arg_type, ArgumentType::Immediate(_))
+    }
     pub fn is_immediate_address(&self) -> bool {
         matches!(self.arg_type, ArgumentType::Address(_))
     }
