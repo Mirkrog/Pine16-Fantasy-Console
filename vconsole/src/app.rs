@@ -1,25 +1,29 @@
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::window::{Window, WindowId};
+use winit::event_loop::ActiveEventLoop;
+use winit::window::{Window, WindowAttributes, WindowId};
 
-#[derive(Default)]
-struct App {
+use crate::console::Console;
+
+pub struct App {
     window: Option<Window>,
 }
 
+impl App {
+    pub fn new() -> Self {
+        Self { window: None }
+    }
+}
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.window = Some(
-            event_loop
-                .create_window(Window::default_attributes())
-                .unwrap(),
-        );
+        let window = event_loop
+            .create_window(WindowAttributes::default())
+            .unwrap();
+
+        self.window = Some(window);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
-        event_loop.set_control_flow(ControlFlow::Poll);
-
         match event {
             WindowEvent::CloseRequested => {
                 println!("The close button was pressed; stopping");
