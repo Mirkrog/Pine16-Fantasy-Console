@@ -1,3 +1,5 @@
+use pixels::SurfaceTexture;
+use std::sync::Arc;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
@@ -6,23 +8,36 @@ use winit::window::{Window, WindowAttributes, WindowId};
 use crate::console::Console;
 
 pub struct App {
-    window: Option<Window>,
+    window: Option<Arc<Window>>,
+    surface_texture: Option<SurfaceTexture<Arc<Window>>>,
+    console: Console,
 }
 
 impl App {
     pub fn new() -> Self {
-        Self { window: None }
+        Self {
+            window: None,
+            surface_texture: None,
+            console: Console::default(),
+        }
     }
 }
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let window = event_loop
-            .create_window(WindowAttributes::default())
-            .unwrap();
+        let window = Arc::new(
+            event_loop
+                .create_window(WindowAttributes::default())
+                .unwrap(),
+        );
+
+        self.surface_texture = Some(SurfaceTexture::new(
+            window.inner_size().width,
+            window.inner_size().height,
+            window.clone(),
+        ));
 
         self.window = Some(window);
     }
-
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
             WindowEvent::CloseRequested => {
@@ -47,5 +62,8 @@ impl ApplicationHandler for App {
             }
             _ => (),
         }
+    }
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let _ = event_loop;
     }
 }

@@ -1,11 +1,16 @@
 use byteorder::{LittleEndian, ReadBytesExt};
+use pixels::{Pixels, wgpu::SurfaceTexture};
 use simple_stopwatch::Stopwatch;
+use std::sync::Arc;
+use winit::window::Window;
 
 use std::{
     fs::File,
     io::{BufReader, Read},
     io::{Seek, SeekFrom},
 };
+
+use crate::renderer::Renderer;
 
 #[repr(u8)]
 #[derive(PartialEq, Eq, Debug)]
@@ -106,6 +111,7 @@ enum VersionMatchType {
 }
 
 pub struct Console {
+    renderer: Renderer,
     rom: Vec<u16>,
     sram: Vec<u16>,
     program_ptr: u32,
@@ -117,6 +123,7 @@ pub struct Console {
 impl Console {
     pub fn new(sram_size: usize) -> Self {
         Self {
+            renderer: Renderer::new(),
             rom: Vec::new(),
             sram: vec![0; sram_size],
             program_ptr: 0,
@@ -127,6 +134,10 @@ impl Console {
     }
     pub fn default() -> Self {
         Self::new(64 * 1000)
+    }
+    /// Creates everything to be able to render
+    pub fn resume(&mut self, surface_texture: pixels::SurfaceTexture<Arc<Window>>) {
+        self.renderer.resume(surface_texture);
     }
     pub fn run(&mut self) {
         loop {
