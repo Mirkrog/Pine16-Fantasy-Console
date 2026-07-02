@@ -2,7 +2,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use pixels::{Pixels, wgpu::SurfaceTexture};
 use simple_stopwatch::Stopwatch;
 use std::sync::Arc;
-use winit::window::Window;
+use winit::{dpi::PhysicalSize, window::Window};
 
 use std::{
     fs::File,
@@ -136,76 +136,79 @@ impl Console {
         Self::new(64 * 1000)
     }
     /// Creates everything to be able to render
-    pub fn resume(&mut self, surface_texture: pixels::SurfaceTexture<Arc<Window>>) {
+    pub fn resume_renderer(&mut self, surface_texture: pixels::SurfaceTexture<Arc<Window>>) {
         self.renderer.resume(surface_texture);
     }
-    pub fn run(&mut self) {
-        loop {
-            // we just skip the current cpu cycle, not clean but works :D
-            if self.stall_timer > 0 {
-                self.stall_timer -= 1;
-                continue;
+    pub fn render(&mut self) {
+        self.renderer.render();
+    }
+    pub fn resize_renderer(&mut self, size: PhysicalSize<u32>) {
+        self.renderer.resize_surface(size.width, size.height);
+    }
+    pub fn step(&mut self) {
+        // we just skip the current cpu cycle, not clean but works :D
+        if self.stall_timer > 0 {
+            self.stall_timer -= 1;
+            return;
+        }
+
+        let instruction = self.parse_next_instruction();
+
+        let mut jumped = false;
+
+        match instruction.opcode {
+            OpCode::NoOp => {}
+            OpCode::Add | OpCode::Sub | OpCode::Mul | OpCode::Div => {
+                let val1 = self.read_arg(&instruction.arg1);
+                let val2 = self.read_arg(&instruction.arg2);
+
+                let result = match instruction.opcode {
+                    OpCode::Add => val1.wrapping_add(val2),
+                    OpCode::Sub => val1.wrapping_sub(val2),
+                    OpCode::Mul => val1.wrapping_mul(val2),
+                    OpCode::Div => val1.wrapping_div(val2),
+                    _ => unreachable!(),
+                };
+
+                self.write_arg(&instruction.arg1, result);
+            }
+            OpCode::Stall => self.stall_timer = self.read_arg(&instruction.arg1),
+            OpCode::Exit => {
+                self.exit_code = self.read_arg(&instruction.arg1);
+                return; // TODO: implement exit
+            }
+            // TODO: add longjumps
+            // we have to jump to the address - 1 because the program_pointer is incremented after this
+            OpCode::Jmp => {
+                self.program_ptr = self.read_arg(&instruction.arg1) as u32;
+                jumped = true;
             }
 
-            let instruction = self.parse_next_instruction();
-
-            let mut jumped = false;
-
-            match instruction.opcode {
-                OpCode::NoOp => {}
-                OpCode::Add | OpCode::Sub | OpCode::Mul | OpCode::Div => {
-                    let val1 = self.read_arg(&instruction.arg1);
-                    let val2 = self.read_arg(&instruction.arg2);
-
-                    let result = match instruction.opcode {
-                        OpCode::Add => val1.wrapping_add(val2),
-                        OpCode::Sub => val1.wrapping_sub(val2),
-                        OpCode::Mul => val1.wrapping_mul(val2),
-                        OpCode::Div => val1.wrapping_div(val2),
-                        _ => unreachable!(),
-                    };
-
-                    self.write_arg(&instruction.arg1, result);
-                }
-                OpCode::Stall => self.stall_timer = self.read_arg(&instruction.arg1),
-                OpCode::Exit => {
-                    self.exit_code = self.read_arg(&instruction.arg1);
-                    break;
-                }
-                // TODO: add longjumps
-                // we have to jump to the address - 1 because the program_pointer is incremented after this
-                OpCode::Jmp => {
+            OpCode::Mov => {
+                let val2 = self.read_arg(&instruction.arg2);
+                self.write_arg(&instruction.arg1, val2);
+            }
+            OpCode::Jeq => {
+                if self.read_arg(&instruction.arg2) == 0 {
                     self.program_ptr = self.read_arg(&instruction.arg1) as u32;
                     jumped = true;
                 }
-
-                OpCode::Mov => {
-                    let val2 = self.read_arg(&instruction.arg2);
-                    self.write_arg(&instruction.arg1, val2);
-                }
-                OpCode::Jeq => {
-                    if self.read_arg(&instruction.arg2) == 0 {
-                        self.program_ptr = self.read_arg(&instruction.arg1) as u32;
-                        jumped = true;
-                    }
-                }
-                OpCode::Jne => {
-                    if self.read_arg(&instruction.arg2) != 0 {
-                        self.program_ptr = self.read_arg(&instruction.arg1) as u32;
-                        jumped = true;
-                    }
-                }
             }
-            if !jumped {
-                self.program_ptr += 1;
-            }
-            // check if we reached the end of the program
-            if self.program_ptr as usize >= self.rom.len() / 3 {
-                self.exit_code = 0;
-                break;
+            OpCode::Jne => {
+                if self.read_arg(&instruction.arg2) != 0 {
+                    self.program_ptr = self.read_arg(&instruction.arg1) as u32;
+                    jumped = true;
+                }
             }
         }
-        println!("Program quit with exit code: {}", self.exit_code)
+        if !jumped {
+            self.program_ptr += 1;
+        }
+        // check if we reached the end of the program
+        if self.program_ptr as usize >= self.rom.len() / 3 {
+            self.exit_code = 0;
+            // TODO: implement exit
+        }
     }
     fn read_arg(&mut self, arg: &Argument) -> u16 {
         match arg.arg_type {
@@ -255,7 +258,7 @@ impl Console {
     pub fn write_ram(&mut self, address: u16, value: u16) {
         self.sram[address as usize] = value
     }
-    pub fn parse_next_instruction(&mut self) -> Instruction {
+    fn parse_next_instruction(&mut self) -> Instruction {
         Instruction::from_u16(
             &self
                 .rom

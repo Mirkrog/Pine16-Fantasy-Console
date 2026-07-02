@@ -9,7 +9,6 @@ use crate::console::Console;
 
 pub struct App {
     window: Option<Arc<Window>>,
-    surface_texture: Option<SurfaceTexture<Arc<Window>>>,
     console: Console,
 }
 
@@ -17,7 +16,6 @@ impl App {
     pub fn new() -> Self {
         Self {
             window: None,
-            surface_texture: None,
             console: Console::default(),
         }
     }
@@ -30,7 +28,7 @@ impl ApplicationHandler for App {
                 .unwrap(),
         );
 
-        self.surface_texture = Some(SurfaceTexture::new(
+        self.console.resume_renderer(SurfaceTexture::new(
             window.inner_size().width,
             window.inner_size().height,
             window.clone(),
@@ -45,25 +43,18 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
-                // Redraw the application.
-                //
-                // It's preferable for applications that do not render continuously to render in
-                // this event rather than in AboutToWait, since rendering in here allows
-                // the program to gracefully handle redraws requested by the OS.
-
-                // Draw.
-
-                // Queue a RedrawRequested event.
-                //
-                // You only need to call this if you've determined that you need to redraw in
-                // applications which do not always need to. Applications that redraw continuously
-                // can render here instead.
-                self.window.as_ref().unwrap().request_redraw();
+                self.console.render();
+            }
+            WindowEvent::Resized(size) => {
+                self.console.resize_renderer(size);
             }
             _ => (),
         }
     }
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let _ = event_loop;
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
     }
 }
