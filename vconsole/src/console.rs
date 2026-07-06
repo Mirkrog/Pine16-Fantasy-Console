@@ -1,5 +1,4 @@
 use byteorder::{LittleEndian, ReadBytesExt};
-use pixels::{Pixels, wgpu::SurfaceTexture};
 use simple_stopwatch::Stopwatch;
 use std::sync::Arc;
 use winit::{dpi::PhysicalSize, window::Window};
@@ -104,17 +103,24 @@ impl Instruction {
     }
 }
 
-enum VersionMatchType {
-    Full,         // The Version Number matches down to the patch
-    Partial,      // The Version Number matches but not the patch
-    Incompatible, // The Mayor or Minor Version doesn't match
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(usize)]
+enum MemoryPois {
+    MayorConsoleVersion = 0x0000,
+    MinorConsoleVersion = 0x0001,
+    PatchConsoleVersion = 0x0002,
+    MayorROMVersion = 0x0003,
+    MinorROMVersion = 0x0004,
+    PatchROMVersion = 0x0005,
+    CPUCycleCounter = 0x0006,
+    ProgramCounter = 0x0007,
 }
 
 pub struct Console {
     renderer: Renderer,
     rom: Vec<u16>,
-    sram: Vec<u16>,
-    program_ptr: u32,
+    ram: Vec<u16>,
+    program_counter: u16,
     stall_timer: u16,
     exit_code: u16,
     registers: [u16; 4],
@@ -125,8 +131,8 @@ impl Console {
         Self {
             renderer: Renderer::new(),
             rom: Vec::new(),
-            sram: vec![0; sram_size],
-            program_ptr: 0,
+            ram: vec![0; sram_size],
+            program_counter: 0,
             stall_timer: 0,
             exit_code: 0,
             registers: [0; 4],
@@ -134,6 +140,9 @@ impl Console {
     }
     pub fn default() -> Self {
         Self::new(64 * 1000)
+    }
+    pub fn is_rom_loaded(&self) -> bool {
+        !self.rom.is_empty()
     }
     /// Creates everything to be able to render
     pub fn resume_renderer(&mut self, surface_texture: pixels::SurfaceTexture<Arc<Window>>) {
@@ -146,7 +155,13 @@ impl Console {
         self.renderer.resize_surface(size.width, size.height);
     }
     pub fn step(&mut self) {
-        // we just skip the current cpu cycle, not clean but works :D
+        // incrementing the cpu counter (it is just for user purposes, so it doesn't need to exist outside ram)
+        self.ram[MemoryPois::CPUCycleCounter as usize] =
+            self.ram[MemoryPois::CPUCycleCounter as usize].wrapping_add(1);
+
+        self.ram[MemoryPois::ProgramCounter as usize] = self.program_counter;
+
+        // we just skip the current cpu cycle if we are still stalling
         if self.stall_timer > 0 {
             self.stall_timer -= 1;
             return;
@@ -178,9 +193,9 @@ impl Console {
                 return; // TODO: implement exit
             }
             // TODO: add longjumps
-            // we have to jump to the address - 1 because the program_pointer is incremented after this
+            // we have to jump to the address - 1 because the program_counter is incremented after this
             OpCode::Jmp => {
-                self.program_ptr = self.read_arg(&instruction.arg1) as u32;
+                self.program_counter = self.read_arg(&instruction.arg1);
                 jumped = true;
             }
 
@@ -190,25 +205,27 @@ impl Console {
             }
             OpCode::Jeq => {
                 if self.read_arg(&instruction.arg2) == 0 {
-                    self.program_ptr = self.read_arg(&instruction.arg1) as u32;
+                    self.program_counter = self.read_arg(&instruction.arg1);
                     jumped = true;
                 }
             }
             OpCode::Jne => {
                 if self.read_arg(&instruction.arg2) != 0 {
-                    self.program_ptr = self.read_arg(&instruction.arg1) as u32;
+                    self.program_counter = self.read_arg(&instruction.arg1);
                     jumped = true;
                 }
             }
         }
         if !jumped {
-            self.program_ptr += 1;
+            self.program_counter += 1;
         }
         // check if we reached the end of the program
-        if self.program_ptr as usize >= self.rom.len() / 3 {
-            self.exit_code = 0;
+        if self.program_counter as usize >= self.rom.len() / 3 {
+            self.program_counter = 0;
             // TODO: implement exit
         }
+
+        self.renderer.draw(&[]);
     }
     fn read_arg(&mut self, arg: &Argument) -> u16 {
         match arg.arg_type {
@@ -253,17 +270,29 @@ impl Console {
         }
     }
     pub fn read_ram(&mut self, address: u16) -> u16 {
-        self.sram.get(address as usize).cloned().unwrap_or(0)
+        self.ram.get(address as usize).cloned().unwrap_or(0)
     }
     pub fn write_ram(&mut self, address: u16, value: u16) {
-        self.sram[address as usize] = value
+        if address < 300 {
+            panic!(
+                "RAM 0x0000-0x012C (aka. 0-300) are readonly, but tried to write to: {:#0x} ({address})",
+                address
+            )
+        }
+        self.ram[address as usize] = value
     }
     fn parse_next_instruction(&mut self) -> Instruction {
         Instruction::from_u16(
             &self
                 .rom
-                .get((self.program_ptr as usize * 3)..(self.program_ptr as usize * 3) + 3)
-                .expect("Out of bounds Instruction read")
+                .get((self.program_counter as usize * 3)..(self.program_counter as usize * 3) + 3)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Program Pointer went out of bounds; ROM len: {}, pointer: {}",
+                        self.rom.len(),
+                        self.program_counter,
+                    );
+                })
                 .try_into()
                 .unwrap(),
         )
@@ -284,23 +313,7 @@ impl Console {
 
         let mut version_bytes: [u8; 3] = [0; 3];
         reader.read_exact(&mut version_bytes)?;
-        match compare_version(version_bytes) {
-            VersionMatchType::Full => {}
-            VersionMatchType::Partial => {
-                println!(
-                    "Rom is only partially compatible (console_ver: {}, bin_ver: {:?})",
-                    env!("CARGO_PKG_VERSION"),
-                    version_bytes
-                )
-            }
-            VersionMatchType::Incompatible => {
-                panic!(
-                    "Rom is not compatible (console_ver: {}, bin_ver: {:?})",
-                    env!("CARGO_PKG_VERSION"),
-                    version_bytes
-                )
-            }
-        }
+        compare_version(version_bytes);
 
         for _ in 0..u16_capacity {
             self.rom.push(match reader.read_u16::<LittleEndian>() {
@@ -310,6 +323,16 @@ impl Console {
                 }
             });
         }
+        // initializing read only flags
+        self.ram[MemoryPois::MayorConsoleVersion as usize] =
+            env!("CARGO_PKG_VERSION_MAJOR").parse::<u16>().unwrap();
+        self.ram[MemoryPois::MinorConsoleVersion as usize] =
+            env!("CARGO_PKG_VERSION_MINOR").parse::<u16>().unwrap();
+        self.ram[MemoryPois::PatchConsoleVersion as usize] =
+            env!("CARGO_PKG_VERSION_PATCH").parse::<u16>().unwrap();
+        self.ram[MemoryPois::MayorROMVersion as usize] = version_bytes[0] as u16;
+        self.ram[MemoryPois::MinorROMVersion as usize] = version_bytes[1] as u16;
+        self.ram[MemoryPois::PatchROMVersion as usize] = version_bytes[2] as u16;
 
         println!("Loaded ROM in: {}s", watch.s());
         Ok(())
@@ -317,16 +340,23 @@ impl Console {
 }
 
 /// Compares version bytes with the version of the console
-fn compare_version(version_bytes: [u8; 3]) -> VersionMatchType {
+fn compare_version(version_bytes: [u8; 3]) {
     let mayor_version = env!("CARGO_PKG_VERSION_MAJOR").parse::<u8>().unwrap();
     let minor_version = env!("CARGO_PKG_VERSION_MINOR").parse::<u8>().unwrap();
     let patch_version = env!("CARGO_PKG_VERSION_PATCH").parse::<u8>().unwrap();
 
     if mayor_version != version_bytes[0] || minor_version != version_bytes[1] {
-        return VersionMatchType::Incompatible;
+        panic!(
+            "Rom is not compatible (console_ver: {}, bin_ver: {:?})",
+            env!("CARGO_PKG_VERSION"),
+            version_bytes
+        )
     }
     if patch_version != version_bytes[2] {
-        return VersionMatchType::Partial;
+        println!(
+            "Rom is only partially compatible (console_ver: {}, bin_ver: {:?})",
+            env!("CARGO_PKG_VERSION"),
+            version_bytes
+        )
     }
-    VersionMatchType::Full
 }

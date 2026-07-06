@@ -1,8 +1,5 @@
 use pixels::Pixels;
-use std::{
-    sync::Arc,
-    time::{Instant, SystemTime, UNIX_EPOCH},
-};
+use std::sync::Arc;
 use winit::window::Window;
 
 pub struct Renderer {
@@ -26,28 +23,17 @@ impl Renderer {
             .resize_surface(width, height)
             .unwrap();
     }
+    /// takes the consoles memory to draw sprites to the Pixel buffer
+    pub fn draw(&mut self, ram_slice: &[u16]) {}
     pub fn render(&mut self) {
         let pixel_buffer = match &mut self.pixel_buffer {
             Some(buffer) => buffer,
             None => {
-                print!("Tried to print without pixel_buffer!");
+                println!("Tried to render without pixel_buffer!");
                 return;
             }
         };
-        let canvas: &mut [u8] = pixel_buffer.frame_mut();
 
-        let time = ((std::time::SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_micros() as i32)
-            / 10000) as u32;
-
-        for (index, pixel) in canvas.chunks_exact_mut(4).enumerate() {
-            pixel[0] = index as u8; // R
-            pixel[1] = (index as u8).wrapping_add((time % 255) as u8); // G
-            pixel[2] = (index as u8).wrapping_mul(101); // B
-            pixel[3] = 0xff; // A
-        }
         pixel_buffer.render().unwrap();
     }
 }

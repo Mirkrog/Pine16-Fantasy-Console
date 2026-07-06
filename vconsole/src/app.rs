@@ -53,6 +53,11 @@ impl ApplicationHandler for App {
     }
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let _ = event_loop;
+        if !self.console.is_rom_loaded() {
+            self.console.load_rom_from_path("test.v16.o").unwrap();
+        }
+        self.console.step();
+
         if let Some(window) = &self.window {
             window.request_redraw();
         }
