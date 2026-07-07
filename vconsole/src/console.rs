@@ -106,10 +106,10 @@ impl Instruction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(usize)]
 enum MemoryPois {
-    MayorConsoleVersion = 0x0000,
+    MajorConsoleVersion = 0x0000,
     MinorConsoleVersion = 0x0001,
     PatchConsoleVersion = 0x0002,
-    MayorROMVersion = 0x0003,
+    MajorROMVersion = 0x0003,
     MinorROMVersion = 0x0004,
     PatchROMVersion = 0x0005,
     CPUCycleCounter = 0x0006,
@@ -324,13 +324,13 @@ impl Console {
             });
         }
         // initializing read only flags
-        self.sram[MemoryPois::MayorConsoleVersion as usize] =
+        self.sram[MemoryPois::MajorConsoleVersion as usize] =
             env!("CARGO_PKG_VERSION_MAJOR").parse::<u16>().unwrap();
         self.sram[MemoryPois::MinorConsoleVersion as usize] =
             env!("CARGO_PKG_VERSION_MINOR").parse::<u16>().unwrap();
         self.sram[MemoryPois::PatchConsoleVersion as usize] =
             env!("CARGO_PKG_VERSION_PATCH").parse::<u16>().unwrap();
-        self.sram[MemoryPois::MayorROMVersion as usize] = version_bytes[0] as u16;
+        self.sram[MemoryPois::MajorROMVersion as usize] = version_bytes[0] as u16;
         self.sram[MemoryPois::MinorROMVersion as usize] = version_bytes[1] as u16;
         self.sram[MemoryPois::PatchROMVersion as usize] = version_bytes[2] as u16;
 
@@ -341,11 +341,11 @@ impl Console {
 
 /// Compares version bytes with the version of the console
 fn compare_version(version_bytes: [u8; 3]) {
-    let mayor_version = env!("CARGO_PKG_VERSION_MAJOR").parse::<u8>().unwrap();
+    let major_version = env!("CARGO_PKG_VERSION_MAJOR").parse::<u8>().unwrap();
     let minor_version = env!("CARGO_PKG_VERSION_MINOR").parse::<u8>().unwrap();
     let patch_version = env!("CARGO_PKG_VERSION_PATCH").parse::<u8>().unwrap();
 
-    if mayor_version != version_bytes[0] || minor_version != version_bytes[1] {
+    if major_version != version_bytes[0] || minor_version != version_bytes[1] {
         panic!(
             "Rom is not compatible (console_ver: {}, bin_ver: {:?})",
             env!("CARGO_PKG_VERSION"),
