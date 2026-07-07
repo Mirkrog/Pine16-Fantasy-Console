@@ -119,7 +119,7 @@ enum MemoryPois {
 pub struct Console {
     renderer: Renderer,
     rom: Vec<u16>,
-    ram: Vec<u16>,
+    sram: Vec<u16>,
     program_counter: u16,
     stall_timer: u16,
     exit_code: u16,
@@ -131,7 +131,7 @@ impl Console {
         Self {
             renderer: Renderer::new(),
             rom: Vec::new(),
-            ram: vec![0; sram_size],
+            sram: vec![0; sram_size],
             program_counter: 0,
             stall_timer: 0,
             exit_code: 0,
@@ -156,10 +156,10 @@ impl Console {
     }
     pub fn step(&mut self) {
         // incrementing the cpu counter (it is just for user purposes, so it doesn't need to exist outside ram)
-        self.ram[MemoryPois::CPUCycleCounter as usize] =
-            self.ram[MemoryPois::CPUCycleCounter as usize].wrapping_add(1);
+        self.sram[MemoryPois::CPUCycleCounter as usize] =
+            self.sram[MemoryPois::CPUCycleCounter as usize].wrapping_add(1);
 
-        self.ram[MemoryPois::ProgramCounter as usize] = self.program_counter;
+        self.sram[MemoryPois::ProgramCounter as usize] = self.program_counter;
 
         // we just skip the current cpu cycle if we are still stalling
         if self.stall_timer > 0 {
@@ -270,16 +270,16 @@ impl Console {
         }
     }
     pub fn read_ram(&mut self, address: u16) -> u16 {
-        self.ram.get(address as usize).cloned().unwrap_or(0)
+        self.sram.get(address as usize).cloned().unwrap_or(0)
     }
     pub fn write_ram(&mut self, address: u16, value: u16) {
         if address < 300 {
             panic!(
-                "RAM 0x0000-0x012C (aka. 0-300) are readonly, but tried to write to: {:#0x} ({address})",
+                "RAM 0x0000-0x012C (aka. 0-300) are readonly, but tried to write to: {:#0x} (aka. {address})",
                 address
             )
         }
-        self.ram[address as usize] = value
+        self.sram[address as usize] = value
     }
     fn parse_next_instruction(&mut self) -> Instruction {
         Instruction::from_u16(
@@ -324,15 +324,15 @@ impl Console {
             });
         }
         // initializing read only flags
-        self.ram[MemoryPois::MayorConsoleVersion as usize] =
+        self.sram[MemoryPois::MayorConsoleVersion as usize] =
             env!("CARGO_PKG_VERSION_MAJOR").parse::<u16>().unwrap();
-        self.ram[MemoryPois::MinorConsoleVersion as usize] =
+        self.sram[MemoryPois::MinorConsoleVersion as usize] =
             env!("CARGO_PKG_VERSION_MINOR").parse::<u16>().unwrap();
-        self.ram[MemoryPois::PatchConsoleVersion as usize] =
+        self.sram[MemoryPois::PatchConsoleVersion as usize] =
             env!("CARGO_PKG_VERSION_PATCH").parse::<u16>().unwrap();
-        self.ram[MemoryPois::MayorROMVersion as usize] = version_bytes[0] as u16;
-        self.ram[MemoryPois::MinorROMVersion as usize] = version_bytes[1] as u16;
-        self.ram[MemoryPois::PatchROMVersion as usize] = version_bytes[2] as u16;
+        self.sram[MemoryPois::MayorROMVersion as usize] = version_bytes[0] as u16;
+        self.sram[MemoryPois::MinorROMVersion as usize] = version_bytes[1] as u16;
+        self.sram[MemoryPois::PatchROMVersion as usize] = version_bytes[2] as u16;
 
         println!("Loaded ROM in: {}s", watch.s());
         Ok(())
