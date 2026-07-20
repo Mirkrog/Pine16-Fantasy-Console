@@ -79,6 +79,22 @@ impl Renderer {
         let spritelayer = &ram_slice[TILESHEET_OFFSET..2000];
         let foreground_layer = &ram_slice[TILESHEET_OFFSET..3000];
 
+        let clear_color = ram_slice[300];
+        //drawing the clear color
+        for pixel in self
+            .pixel_buffer
+            .as_mut()
+            .expect("Tried to draw to uninitialized Pixels canvas")
+            .frame_mut()
+            .chunks_exact_mut(4)
+        {
+            pixel[0] = (clear_color >> 11) as u8;
+            pixel[1] = ((clear_color & 0b00000111111) >> 6) as u8;
+            pixel[2] = (clear_color & 0b0000000000011111) as u8;
+            pixel[3] = 0xFF;
+        }
+
+        // drawing the background layer
         for (i, tile_word) in background_map.iter().enumerate() {
             self.draw_tile(
                 ram_slice,

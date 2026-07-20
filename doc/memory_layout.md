@@ -21,4 +21,5 @@ The memory of the console is divided into 4 sections. Their size and usage are t
 - `0x0006` **(6)**: CPU cycle counter
 
 ### System Config Registers (Read/Write)
-- `0x012C` **(300 - 314)**: Here you can override the default palette which has 15 colors + blank (because of blank it is 1 indexed). One word per color, packed like this: [ Red (5b) : 00 01 02 03 04 | Green (6b): 05 06 07 08 09 10 | Blue (5b): 11 12 13 14 15 ]
+- `0x012C` **(300)**: Here you can override the clear color One word, packed like this: [ Red (5b) : 00 01 02 03 04 | Green (6b): 05 06 07 08 09 10 | Blue (5b): 11 12 13 14 15 ]
+- `0x012D - 0x013B` **(301 - 315)**: Here you can override the default palette which has 15 colors + blank (because of blank it is 1 indexed). One word per color, packed like this: [ Red (5b) : 00 01 02 03 04 | Green (6b): 05 06 07 08 09 10 | Blue (5b): 11 12 13 14 15 ]

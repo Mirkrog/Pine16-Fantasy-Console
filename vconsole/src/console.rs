@@ -225,7 +225,7 @@ impl Console {
             // TODO: implement exit
         }
 
-        self.renderer.draw(&[]);
+        self.renderer.draw(&self.sram);
     }
     fn read_arg(&mut self, arg: &Argument) -> u16 {
         match arg.arg_type {
