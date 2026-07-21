@@ -27,7 +27,7 @@ enum OpCode {
     Jne,
 }
 impl OpCode {
-    fn from_u8(bytecode: u8) -> anyhow::Result<Self> {
+    fn from_u8(bytecode: u8) -> Result<OpCode, String> {
         match bytecode {
             0 => Ok(OpCode::NoOp),
             1 => Ok(OpCode::Add),
@@ -40,9 +40,7 @@ impl OpCode {
             8 => Ok(OpCode::Jmp),
             9 => Ok(OpCode::Jeq),
             10 => Ok(OpCode::Jne),
-            other => {
-                anyhow::bail!("Unknown OpCode: {other}")
-            }
+            other => Err(format!("Unknown OpCode: {other}")),
         }
     }
 }
@@ -57,16 +55,14 @@ pub enum ArgumentType {
     Register,               // Points to one of the registers
 }
 impl ArgumentType {
-    fn from_u8(bytecode: u8) -> anyhow::Result<Self> {
+    fn from_u8(bytecode: u8) -> Result<ArgumentType, String> {
         match bytecode {
             0 => Ok(ArgumentType::Empty),
             1 => Ok(ArgumentType::Immediate),
             2 => Ok(ArgumentType::Address),
             3 => Ok(ArgumentType::Register),
             4 => Ok(ArgumentType::RegisterPointedAddress),
-            other => {
-                anyhow::bail!("Unknown ArgumentType: {} (0 - 5)", other)
-            }
+            other => Err(format!("Unknown ArgumentType: {} (0 - 5)", other)),
         }
     }
 }
@@ -90,7 +86,7 @@ pub struct Instruction {
 }
 
 impl Instruction {
-    fn from_u16(source: &[u16; 3]) -> anyhow::Result<Self> {
+    fn from_u16(source: &[u16; 3]) -> Result<Instruction, String> {
         // they are all bytes but arg0 and arg1 are only u4
         let (opcode_byte, args_byte) = ((source[0] >> 8) as u8, (source[0] & 0xff) as u8);
         let (arg1_type_byte, arg2_type_byte) = ((args_byte >> 4), args_byte & 0b00001111);
@@ -131,7 +127,7 @@ impl Console {
         Self {
             renderer: Renderer::new(),
             rom: Vec::new(),
-            sram: vec![0; sram_size],
+            sram: vec![0x0000a; sram_size],
             program_counter: 0,
             stall_timer: 0,
             exit_code: 0,
@@ -227,7 +223,7 @@ impl Console {
 
         self.renderer.draw(&self.sram);
     }
-    fn read_arg(&mut self, arg: &Argument) -> u16 {
+    fn read_arg(&self, arg: &Argument) -> u16 {
         match arg.arg_type {
             ArgumentType::Empty => panic!("Can't read from empty"),
             ArgumentType::Immediate => arg.value,
@@ -269,17 +265,15 @@ impl Console {
             }
         }
     }
-    pub fn read_ram(&mut self, address: u16) -> u16 {
-        self.sram.get(address as usize).cloned().unwrap_or(0)
+    #[inline(always)]
+    pub fn read_ram(&self, address: u16) -> u16 {
+        self.sram[address as usize]
     }
+    #[inline(always)]
     pub fn write_ram(&mut self, address: u16, value: u16) {
-        if address < 300 {
-            panic!(
-                "RAM 0x0000-0x012C (aka. 0-300) are readonly, but tried to write to: {:#0x} (aka. {address})",
-                address
-            )
+        if address >= 300 {
+            self.sram[address as usize] = value;
         }
-        self.sram[address as usize] = value
     }
     fn parse_next_instruction(&mut self) -> Instruction {
         Instruction::from_u16(

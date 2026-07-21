@@ -343,10 +343,7 @@ impl<'a> Assembler<'a> {
 
         if instruction.split_whitespace().collect::<Vec<&str>>().len() > 3 {
             self.errors.push(AssemblerError::TooManyArguments {
-                span: SourceSpan::new(
-                    (opcode_token.as_ptr() as usize).into(),
-                    instruction.len() - opcode_token.as_ptr() as usize - source_start_ptr,
-                ),
+                span: SourceSpan::new((opcode_token.as_ptr() as usize).into(), instruction.len()),
             });
         }
 

@@ -6,6 +6,7 @@ const PALETTE_OFFSET: usize = 300;
 const TILESHEET_OFFSET: usize = 1000;
 const TILEMAP_OFFSET: usize = TILESHEET_OFFSET + 2560;
 
+// these are just for convenience and mustn't be changed
 const CANVAS_WIDTH: usize = 320;
 const CAVAS_HEIGHT: usize = 200;
 
@@ -38,49 +39,50 @@ impl Renderer {
         if id == 0 {
             return;
         }
-        let pixel_buffer = self
-            .pixel_buffer
-            .as_mut()
-            .expect("Tried to draw to uninitialized Pixels canvas")
-            .frame_mut();
-        for (pixel_y, row) in ram_slice[TILESHEET_OFFSET + id..4 * 8]
-            .chunks_exact(4)
+        for (pixel_y, row) in ram_slice
+            [TILESHEET_OFFSET + (id * 16)..TILESHEET_OFFSET + (id * 16) + 16]
+            .chunks_exact(2)
             .enumerate()
         {
-            for (pixel_x, palette_index) in row.iter().enumerate() {
-                let target_x = x + pixel_x;
+            for (pixel_chunk_x, half_row) in row.iter().enumerate() {
+                let target_x = x + pixel_chunk_x * 4;
                 let target_y = y + pixel_y;
-                let pixel = pixel_buffer
-                    .chunks_exact_mut(8)
-                    .nth(target_y * CANVAS_WIDTH + target_x)
-                    .expect("Canvas pixel out of bounds: {target_x}, {target_y}");
-                if *palette_index >= 256 {
-                    panic!("Palette index out of bounds: {palette_index}")
+                for x_offset in 0..4 {
+                    let pixel = self
+                        .pixel_buffer
+                        .as_mut()
+                        .expect("Tried to draw to uninitialized Pixels canvas")
+                        .frame_mut()
+                        .chunks_exact_mut(4)
+                        .nth(target_x + x_offset + target_y * CANVAS_WIDTH)
+                        .unwrap_or_else(|| panic!("Pixel coordinate: ({target_x}, {target_y}) out of range: ({CANVAS_WIDTH}, {CAVAS_HEIGHT})"));
+                    let shift = (3 - x_offset) * 4;
+                    let color_id = ((half_row >> shift) & 0x000F) as usize;
+                    if color_id == 0 {
+                        continue;
+                    }
+                    if color_id >= 16 {
+                        panic!("Color Palette index: {color_id} is out of range (0 - 15)")
+                    }
+                    let color = ram_slice[PALETTE_OFFSET + color_id];
+                    let (red, green, blue) = rgb_from_rgb565(color);
+                    pixel[0] = red;
+                    pixel[1] = green;
+                    pixel[2] = blue;
+                    pixel[3] = 0xff;
                 }
-                if *palette_index == 0 {
-                    continue;
-                }
-                let color1 = ram_slice[PALETTE_OFFSET + *palette_index as usize] & 0xFF00;
-                pixel[0] = (color1 >> 11) as u8;
-                pixel[1] = ((color1 & 0b00000111111) >> 6) as u8;
-                pixel[2] = (color1 & 0b0000000000011111) as u8;
-                pixel[3] = 0xFF;
-                let color2 = ram_slice[PALETTE_OFFSET + *palette_index as usize] & 0x00FF;
-                pixel[4] = (color2 >> 11) as u8;
-                pixel[5] = ((color2 & 0b00000111111) >> 6) as u8;
-                pixel[6] = (color2 & 0b0000000000011111) as u8;
-                pixel[7] = 0xFF;
             }
         }
     }
     /// reads the consoles memory to draw sprites to the Pixel buffer
     pub fn draw(&mut self, ram_slice: &[u16]) {
-        let background_map = &ram_slice[TILESHEET_OFFSET..1000];
-        let spritelayer = &ram_slice[TILESHEET_OFFSET..2000];
-        let foreground_layer = &ram_slice[TILESHEET_OFFSET..3000];
+        let background_map = &ram_slice[TILEMAP_OFFSET..TILEMAP_OFFSET + 1000];
+        let spritelayer = &ram_slice[TILEMAP_OFFSET..TILEMAP_OFFSET + 2000];
+        let foreground_layer = &ram_slice[TILEMAP_OFFSET..TILEMAP_OFFSET + 3000];
 
-        let clear_color = ram_slice[300];
         //drawing the clear color
+        let clear_color = ram_slice[300];
+        let (red, green, blue) = rgb_from_rgb565(clear_color);
         for pixel in self
             .pixel_buffer
             .as_mut()
@@ -88,20 +90,20 @@ impl Renderer {
             .frame_mut()
             .chunks_exact_mut(4)
         {
-            pixel[0] = (clear_color >> 11) as u8;
-            pixel[1] = ((clear_color & 0b00000111111) >> 6) as u8;
-            pixel[2] = (clear_color & 0b0000000000011111) as u8;
-            pixel[3] = 0xFF;
+            pixel[0] = red;
+            pixel[1] = green;
+            pixel[2] = blue;
+            pixel[3] = 0xff;
         }
 
         // drawing the background layer
         for (i, tile_word) in background_map.iter().enumerate() {
             self.draw_tile(
                 ram_slice,
-                (tile_word & 0xFF00) as usize,
                 (tile_word & 0x00FF) as usize,
-                i % CANVAS_WIDTH,
-                i / CANVAS_WIDTH,
+                (tile_word & 0xFF00) as usize,
+                (i * 8) % CANVAS_WIDTH,
+                (i * 8) / CANVAS_WIDTH * 8,
             );
         }
     }
@@ -116,4 +118,13 @@ impl Renderer {
 
         pixel_buffer.render().unwrap();
     }
+}
+fn rgb_from_rgb565(rgb565: u16) -> (u8, u8, u8) {
+    let r5 = ((rgb565 >> 11) & 0b00011111) as u8;
+    let g6 = ((rgb565 >> 5) & 0b00111111) as u8;
+    let b5 = (rgb565 & 0b00011111) as u8;
+    let red = ((r5 as u32 * 255) / 31) as u8;
+    let green = ((g6 as u32 * 255) / 63) as u8;
+    let blue = ((b5 as u32 * 255) / 31) as u8;
+    (red, green, blue)
 }
