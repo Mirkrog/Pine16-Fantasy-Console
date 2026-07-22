@@ -222,9 +222,10 @@ impl Console {
                 self.program_counter = 0;
                 // TODO: implement exit
             }
-
-            self.renderer.draw(&self.sram);
         }
+
+        self.renderer.draw(&self.sram);
+
         println!("step took: {}ms", stopwatch.ms())
     }
     fn read_arg(&self, arg: &Argument) -> u16 {
