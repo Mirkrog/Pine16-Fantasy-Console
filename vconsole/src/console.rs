@@ -151,77 +151,81 @@ impl Console {
         self.renderer.resize_surface(size.width, size.height);
     }
     pub fn step(&mut self) {
-        // incrementing the cpu counter (it is just for user purposes, so it doesn't need to exist outside ram)
-        self.sram[MemoryPois::CPUCycleCounter as usize] =
-            self.sram[MemoryPois::CPUCycleCounter as usize].wrapping_add(1);
+        let stopwatch = Stopwatch::start_new();
+        while stopwatch.ms() < 100.0 {
+            // incrementing the cpu counter (it is just for user purposes, so it doesn't need to exist outside ram)
+            self.sram[MemoryPois::CPUCycleCounter as usize] =
+                self.sram[MemoryPois::CPUCycleCounter as usize].wrapping_add(1);
 
-        self.sram[MemoryPois::ProgramCounter as usize] = self.program_counter;
+            self.sram[MemoryPois::ProgramCounter as usize] = self.program_counter;
 
-        // we just skip the current cpu cycle if we are still stalling
-        if self.stall_timer > 0 {
-            self.stall_timer -= 1;
-            return;
-        }
-
-        let instruction = self.parse_next_instruction();
-
-        let mut jumped = false;
-
-        match instruction.opcode {
-            OpCode::NoOp => {}
-            OpCode::Add | OpCode::Sub | OpCode::Mul | OpCode::Div => {
-                let val1 = self.read_arg(&instruction.arg1);
-                let val2 = self.read_arg(&instruction.arg2);
-
-                let result = match instruction.opcode {
-                    OpCode::Add => val1.wrapping_add(val2),
-                    OpCode::Sub => val1.wrapping_sub(val2),
-                    OpCode::Mul => val1.wrapping_mul(val2),
-                    OpCode::Div => val1.wrapping_div(val2),
-                    _ => unreachable!(),
-                };
-
-                self.write_arg(&instruction.arg1, result);
-            }
-            OpCode::Stall => self.stall_timer = self.read_arg(&instruction.arg1),
-            OpCode::Exit => {
-                self.exit_code = self.read_arg(&instruction.arg1);
-                return; // TODO: implement exit
-            }
-            // TODO: add longjumps
-            // we have to jump to the address - 1 because the program_counter is incremented after this
-            OpCode::Jmp => {
-                self.program_counter = self.read_arg(&instruction.arg1);
-                jumped = true;
+            // we just skip the current cpu cycle if we are still stalling
+            if self.stall_timer > 0 {
+                self.stall_timer -= 1;
+                continue;
             }
 
-            OpCode::Mov => {
-                let val2 = self.read_arg(&instruction.arg2);
-                self.write_arg(&instruction.arg1, val2);
-            }
-            OpCode::Jeq => {
-                if self.read_arg(&instruction.arg2) == 0 {
+            let instruction = self.parse_next_instruction();
+
+            let mut jumped = false;
+
+            match instruction.opcode {
+                OpCode::NoOp => {}
+                OpCode::Add | OpCode::Sub | OpCode::Mul | OpCode::Div => {
+                    let val1 = self.read_arg(&instruction.arg1);
+                    let val2 = self.read_arg(&instruction.arg2);
+
+                    let result = match instruction.opcode {
+                        OpCode::Add => val1.wrapping_add(val2),
+                        OpCode::Sub => val1.wrapping_sub(val2),
+                        OpCode::Mul => val1.wrapping_mul(val2),
+                        OpCode::Div => val1.wrapping_div(val2),
+                        _ => unreachable!(),
+                    };
+
+                    self.write_arg(&instruction.arg1, result);
+                }
+                OpCode::Stall => self.stall_timer = self.read_arg(&instruction.arg1),
+                OpCode::Exit => {
+                    self.exit_code = self.read_arg(&instruction.arg1);
+                    return; // TODO: implement exit
+                }
+                // TODO: add longjumps
+                // we have to jump to the address - 1 because the program_counter is incremented after this
+                OpCode::Jmp => {
                     self.program_counter = self.read_arg(&instruction.arg1);
                     jumped = true;
                 }
-            }
-            OpCode::Jne => {
-                if self.read_arg(&instruction.arg2) != 0 {
-                    self.program_counter = self.read_arg(&instruction.arg1);
-                    jumped = true;
+
+                OpCode::Mov => {
+                    let val2 = self.read_arg(&instruction.arg2);
+                    self.write_arg(&instruction.arg1, val2);
+                }
+                OpCode::Jeq => {
+                    if self.read_arg(&instruction.arg2) == 0 {
+                        self.program_counter = self.read_arg(&instruction.arg1);
+                        jumped = true;
+                    }
+                }
+                OpCode::Jne => {
+                    if self.read_arg(&instruction.arg2) != 0 {
+                        self.program_counter = self.read_arg(&instruction.arg1);
+                        jumped = true;
+                    }
                 }
             }
-        }
-        if !jumped {
-            self.program_counter += 1;
-        }
-        // check if we reached the end of the program
-        if self.program_counter as usize >= self.rom.len() / 3 {
-            self.program_counter = 0;
-            // TODO: implement exit
-        }
+            if !jumped {
+                self.program_counter += 1;
+            }
+            // check if we reached the end of the program
+            if self.program_counter as usize >= self.rom.len() / 3 {
+                self.program_counter = 0;
+                // TODO: implement exit
+            }
 
-        self.renderer.draw(&self.sram);
+            self.renderer.draw(&self.sram);
+        }
+        println!("step took: {}ms", stopwatch.ms())
     }
     fn read_arg(&self, arg: &Argument) -> u16 {
         match arg.arg_type {

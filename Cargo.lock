@@ -127,6 +127,7 @@ dependencies = [
  "byteorder",
  "colored",
  "miette",
+ "parse_int",
  "simple-stopwatch",
  "thiserror 2.0.18",
 ]
@@ -1322,6 +1323,15 @@ dependencies = [
  "redox_syscall 0.5.18",
  "smallvec",
  "windows-link",
+]
+
+[[package]]
+name = "parse_int"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c464266693329dd5a8715098c7f86e6c5fd5d985018b8318f53d9c6c2b21a31"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]

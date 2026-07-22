@@ -99,7 +99,7 @@ impl Argument {
         }
 
         let arg_type = match identifier {
-            "#" => ArgumentType::Immediate(value.parse::<u16>().map_err(|e| {
+            "#" => ArgumentType::Immediate(parse_int::parse::<u16>(value).map_err(|e| {
                 AssemblerError::FailedToParseNumber {
                     number: value.to_string(),
                     parseerror: e,
@@ -109,7 +109,7 @@ impl Argument {
             "$" => {
                 let (address_type, value) = value.split_at(1);
                 match address_type {
-                    "#" => ArgumentType::Address(value.parse::<u16>().map_err(|e| {
+                    "#" => ArgumentType::Address(parse_int::parse::<u16>(value).map_err(|e| {
                         AssemblerError::FailedToParseNumber {
                             number: value.to_string(),
                             parseerror: e,

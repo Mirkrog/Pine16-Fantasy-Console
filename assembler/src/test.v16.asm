@@ -97,14 +97,6 @@ odd_row_loop:
 ; Shifting 4px right/down by toggling palette registers!
 ; ==========================================================
 main_loop:
-    ; --- STATE A: Normal Position ---
-    mov $#305 #64080    ; Palette Slot 5 = Cyber Pink
-    mov $#312 #64331    ; Palette Slot 12 = Neon Coral
-    stall #50           ; Pause animation for ~50 CPU cycles
-
-    ; --- STATE B: Shifted 4 Pixels Right / Bottom ---
-    mov $#305 #64331    ; Palette Slot 5 = Neon Coral (Invert!)
-    mov $#312 #64080    ; Palette Slot 12 = Cyber Pink (Invert!)
-    stall #50           ; Pause animation for ~50 CPU cycles
+    stall #0b00000000_00000001
 
     jmp main_loop       ; Loop forever!

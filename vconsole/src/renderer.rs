@@ -22,6 +22,7 @@ impl Renderer {
             Pixels::new(CANVAS_WIDTH as u32, CAVAS_HEIGHT as u32, surface_texture).unwrap();
 
         pixel_buffer.set_scaling_mode(pixels::ScalingMode::Fill);
+        pixel_buffer.enable_vsync(true);
 
         self.pixel_buffer = Some(pixel_buffer);
     }

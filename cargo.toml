@@ -1,3 +1,6 @@
 [workspace]
 members = ["assembler", "vconsole"]
 resolver = "3"
+
+[profile.release]
+debug = true
