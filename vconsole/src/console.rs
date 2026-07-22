@@ -333,7 +333,24 @@ impl Console {
         self.sram[MemoryPois::MinorROMVersion as usize] = version_bytes[1] as u16;
         self.sram[MemoryPois::PatchROMVersion as usize] = version_bytes[2] as u16;
 
-        println!("Loaded ROM in: {}s", watch.s());
+        // initializing palette
+        self.sram[301] = 6373; // Index 1:  Deep Night
+        self.sram[302] = 63423; // Index 2:  Cloud White
+        self.sram[303] = 16970; // Index 3:  Charcoal
+        self.sram[304] = 42293; // Index 4:  Silver
+        self.sram[305] = 64080; // Index 5:  Cyber Pink
+        self.sram[306] = 13439; // Index 6:  Ocean Blue
+        self.sram[307] = 16062; // Index 7:  Sky Cyan
+        self.sram[308] = 34695; // Index 8:  Slime Green
+        self.sram[309] = 47869; // Index 9:  Magic Violet
+        self.sram[310] = 27358; // Index 10: Electric Indigo
+        self.sram[311] = 60591; // Index 11: Toasted Peach
+        self.sram[312] = 64331; // Index 12: Neon Coral
+        self.sram[313] = 64966; // Index 13: Sunny Amber
+        self.sram[314] = 63303; // Index 14: Electric Lemon
+        self.sram[315] = 12017; // Index 15: Minty Green
+
+        println!("Loaded ROM in: {}ms", watch.ms());
         Ok(())
     }
 }

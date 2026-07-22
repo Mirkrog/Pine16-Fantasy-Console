@@ -1,4 +1,4 @@
-use pixels::Pixels;
+use pixels::{Pixels, wgpu::naga::back::spv::SourceLanguage::HERO_C};
 use std::sync::Arc;
 use winit::window::Window;
 
@@ -12,10 +12,14 @@ const CAVAS_HEIGHT: usize = 200;
 
 pub struct Renderer {
     pixel_buffer: Option<Pixels<'static>>,
+    surface_visible: bool,
 }
 impl Renderer {
     pub fn new() -> Self {
-        Self { pixel_buffer: None }
+        Self {
+            pixel_buffer: None,
+            surface_visible: true,
+        }
     }
     pub fn resume(&mut self, surface_texture: pixels::SurfaceTexture<Arc<Window>>) {
         let mut pixel_buffer =
@@ -27,6 +31,14 @@ impl Renderer {
         self.pixel_buffer = Some(pixel_buffer);
     }
     pub fn resize_surface(&mut self, width: u32, height: u32) {
+        if width == 0 || height == 0 {
+            println!("Surface not visible, dissabling rendering");
+            self.surface_visible = false;
+            return;
+        } else if !self.surface_visible {
+            println!("Surface visible, enabling rendering");
+            self.surface_visible = true;
+        }
         self.pixel_buffer
             .as_mut()
             .expect("Tried to resize, but pixelbuffer is uninitialized")
@@ -109,6 +121,9 @@ impl Renderer {
         }
     }
     pub fn render(&mut self) {
+        if !self.surface_visible {
+            return;
+        }
         let pixel_buffer = match &mut self.pixel_buffer {
             Some(buffer) => buffer,
             None => {
