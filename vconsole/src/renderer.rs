@@ -1,4 +1,4 @@
-use pixels::{Pixels, wgpu::naga::back::spv::SourceLanguage::HERO_C};
+use pixels::{Pixels, wgpu::Color};
 use std::sync::Arc;
 use winit::window::Window;
 
@@ -25,6 +25,12 @@ impl Renderer {
         let mut pixel_buffer =
             Pixels::new(CANVAS_WIDTH as u32, CAVAS_HEIGHT as u32, surface_texture).unwrap();
 
+        pixel_buffer.clear_color(Color {
+            r: 0.2,
+            g: 0.2,
+            b: 0.2,
+            a: 1.0,
+        });
         pixel_buffer.set_scaling_mode(pixels::ScalingMode::Fill);
         pixel_buffer.enable_vsync(true);
 

@@ -46,6 +46,9 @@ impl OpCode {
             8 => Ok(OpCode::Jmp),
             9 => Ok(OpCode::Jeq),
             10 => Ok(OpCode::Jne),
+            11 => Ok(OpCode::And),
+            12 => Ok(OpCode::Or),
+            13 => Ok(OpCode::Xor),
             other => Err(format!("Unknown OpCode: {other}")),
         }
     }
@@ -133,7 +136,7 @@ impl Console {
         Self {
             renderer: Renderer::new(),
             rom: Vec::new(),
-            sram: vec![0x0000a; sram_size],
+            sram: vec![0; sram_size],
             program_counter: 0,
             stall_timer: 0,
             exit_code: 0,
