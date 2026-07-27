@@ -1,6 +1,9 @@
 use byteorder::{LittleEndian, ReadBytesExt};
 use simple_stopwatch::Stopwatch;
-use std::sync::Arc;
+use std::{
+    ops::{BitAnd, BitOr, BitXor},
+    sync::Arc,
+};
 use winit::{dpi::PhysicalSize, window::Window};
 
 use std::{
@@ -25,6 +28,9 @@ enum OpCode {
     Jmp,
     Jeq,
     Jne,
+    And,
+    Or,
+    Xor,
 }
 impl OpCode {
     fn from_u8(bytecode: u8) -> Result<OpCode, String> {
@@ -152,7 +158,7 @@ impl Console {
     }
     pub fn step(&mut self) {
         let stopwatch = Stopwatch::start_new();
-        while stopwatch.ms() < 100.0 {
+        while stopwatch.ms() < 50.0 {
             // incrementing the cpu counter (it is just for user purposes, so it doesn't need to exist outside ram)
             self.sram[MemoryPois::CPUCycleCounter as usize] =
                 self.sram[MemoryPois::CPUCycleCounter as usize].wrapping_add(1);
@@ -171,7 +177,13 @@ impl Console {
 
             match instruction.opcode {
                 OpCode::NoOp => {}
-                OpCode::Add | OpCode::Sub | OpCode::Mul | OpCode::Div => {
+                OpCode::Add
+                | OpCode::Sub
+                | OpCode::Mul
+                | OpCode::Div
+                | OpCode::And
+                | OpCode::Or
+                | OpCode::Xor => {
                     let val1 = self.read_arg(&instruction.arg1);
                     let val2 = self.read_arg(&instruction.arg2);
 
@@ -180,6 +192,9 @@ impl Console {
                         OpCode::Sub => val1.wrapping_sub(val2),
                         OpCode::Mul => val1.wrapping_mul(val2),
                         OpCode::Div => val1.wrapping_div(val2),
+                        OpCode::And => val1.bitand(val2),
+                        OpCode::Or => val1.bitor(val2),
+                        OpCode::Xor => val1.bitxor(val2),
                         _ => unreachable!(),
                     };
 
@@ -287,7 +302,7 @@ impl Console {
                 .get((self.program_counter as usize * 3)..(self.program_counter as usize * 3) + 3)
                 .unwrap_or_else(|| {
                     panic!(
-                        "Program Pointer went out of bounds; ROM len: {}, pointer: {}",
+                        "Program Pointer went out of bounds; ROM len: {}, Program Pointer: {}",
                         self.rom.len(),
                         self.program_counter,
                     );
@@ -334,21 +349,21 @@ impl Console {
         self.sram[MemoryPois::PatchROMVersion as usize] = version_bytes[2] as u16;
 
         // initializing palette
-        self.sram[301] = 6373; // Index 1:  Deep Night
-        self.sram[302] = 63423; // Index 2:  Cloud White
-        self.sram[303] = 16970; // Index 3:  Charcoal
-        self.sram[304] = 42293; // Index 4:  Silver
-        self.sram[305] = 64080; // Index 5:  Cyber Pink
-        self.sram[306] = 13439; // Index 6:  Ocean Blue
-        self.sram[307] = 16062; // Index 7:  Sky Cyan
-        self.sram[308] = 34695; // Index 8:  Slime Green
-        self.sram[309] = 47869; // Index 9:  Magic Violet
-        self.sram[310] = 27358; // Index 10: Electric Indigo
-        self.sram[311] = 60591; // Index 11: Toasted Peach
-        self.sram[312] = 64331; // Index 12: Neon Coral
-        self.sram[313] = 64966; // Index 13: Sunny Amber
-        self.sram[314] = 63303; // Index 14: Electric Lemon
-        self.sram[315] = 12017; // Index 15: Minty Green
+        self.sram[301] = 0x18E5; // Index 1:  Deep Night
+        self.sram[302] = 0xF7BF; // Index 2:  Cloud White
+        self.sram[303] = 0x424A; // Index 3:  Charcoal
+        self.sram[304] = 0xA535; // Index 4:  Silver
+        self.sram[305] = 0xFA50; // Index 5:  Cyber Pink
+        self.sram[306] = 0x347F; // Index 6:  Ocean Blue
+        self.sram[307] = 0x3EBE; // Index 7:  Sky Cyan
+        self.sram[308] = 0x8787; // Index 8:  Slime Green
+        self.sram[309] = 0xBAFD; // Index 9:  Magic Violet
+        self.sram[310] = 0x6ADE; // Index 10: Electric Indigo
+        self.sram[311] = 0xECAF; // Index 11: Toasted Peach
+        self.sram[312] = 0xFB4B; // Index 12: Neon Coral
+        self.sram[313] = 0xFDC6; // Index 13: Sunny Amber
+        self.sram[314] = 0xF747; // Index 14: Electric Lemon
+        self.sram[315] = 0x2EF1; // Index 15: Minty Green
 
         println!("Loaded ROM in: {}ms", watch.ms());
         Ok(())

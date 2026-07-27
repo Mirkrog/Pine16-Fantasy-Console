@@ -1,24 +1,4 @@
 ; ==========================================================
-; 1. SYSTEM INIT: Load Palette Registers ($#301 - $#315)
-; ==========================================================
-init_palette:
-    mov $#301 #6373     ; Index 1:  Deep Night
-    mov $#302 #63423    ; Index 2:  Cloud White
-    mov $#303 #16970    ; Index 3:  Charcoal
-    mov $#304 #42293    ; Index 4:  Silver
-    mov $#305 #64080    ; Index 5:  Cyber Pink  (#64080)
-    mov $#306 #13439    ; Index 6:  Ocean Blue
-    mov $#307 #16062    ; Index 7:  Sky Cyan
-    mov $#308 #34695    ; Index 8:  Slime Green
-    mov $#309 #47869    ; Index 9:  Magic Violet
-    mov $#310 #27358    ; Index 10: Electric Indigo
-    mov $#311 #60591    ; Index 11: Toasted Peach
-    mov $#312 #64331    ; Index 12: Neon Coral  (#64331)
-    mov $#313 #64966    ; Index 13: Sunny Amber
-    mov $#314 #63303    ; Index 14: Electric Lemon
-    mov $#315 #12017    ; Index 15: Minty Green
-
-; ==========================================================
 ; 2. TILE DEFINITIONS (Tilesheet @ Address 1000)
 ; ==========================================================
 init_tile_1:

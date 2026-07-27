@@ -18,6 +18,9 @@ enum OpCode {
     Jmp,
     Jeq,
     Jne,
+    And,
+    Or,
+    Xor,
 }
 impl OpCode {
     fn from_str(string: &str, file_byte_index: usize) -> Result<Self, AssemblerError> {
@@ -33,6 +36,9 @@ impl OpCode {
             "jmp" => Ok(OpCode::Jmp),
             "jeq" => Ok(OpCode::Jeq),
             "jne" => Ok(OpCode::Jne),
+            "and" => Ok(OpCode::And),
+            "or" => Ok(OpCode::Or),
+            "xor" => Ok(OpCode::Xor),
             other => Err(AssemblerError::UnknownOpCode {
                 opcode: other.to_string(),
                 span: SourceSpan::new(file_byte_index.into(), string.len()),
@@ -382,58 +388,28 @@ impl<'a> Assembler<'a> {
             OpCode::NoOp => {
                 self.convert_to_bytecode(opcode, arg1, arg2, Some(|_| true), Some(|_| true))
             }
-            OpCode::Add => self.convert_to_bytecode(
+            OpCode::Add
+            | OpCode::Sub
+            | OpCode::Mul
+            | OpCode::Div
+            | OpCode::Mov
+            | OpCode::And
+            | OpCode::Or
+            | OpCode::Xor => self.convert_to_bytecode(
                 opcode,
                 arg1,
                 arg2,
                 Some(|arg| arg.is_writable()),
                 Some(|arg| arg.is_readable()),
             ),
-            OpCode::Sub => self.convert_to_bytecode(
-                opcode,
-                arg1,
-                arg2,
-                Some(|arg| arg.is_writable()),
-                Some(|arg| arg.is_readable()),
-            ),
-            OpCode::Mul => self.convert_to_bytecode(
-                opcode,
-                arg1,
-                arg2,
-                Some(|arg| arg.is_writable()),
-                Some(|arg| arg.is_readable()),
-            ),
-            OpCode::Div => self.convert_to_bytecode(
-                opcode,
-                arg1,
-                arg2,
-                Some(|arg| arg.is_writable()),
-                Some(|arg| arg.is_readable()),
-            ),
-            OpCode::Exit => {
+            OpCode::Exit | OpCode::Stall => {
                 self.convert_to_bytecode(opcode, arg1, arg2, Some(|arg| arg.is_readable()), None)
             }
-            OpCode::Stall => {
-                self.convert_to_bytecode(opcode, arg1, arg2, Some(|arg| arg.is_readable()), None)
-            }
-            OpCode::Mov => self.convert_to_bytecode(
-                opcode,
-                arg1,
-                arg2,
-                Some(|arg| arg.is_writable()),
-                Some(|arg| arg.is_readable()),
-            ),
             OpCode::Jmp => {
                 self.convert_to_bytecode(opcode, arg1, arg2, Some(|arg| arg.is_label()), None)
             }
-            OpCode::Jeq => self.convert_to_bytecode(
-                opcode,
-                arg1,
-                arg2,
-                Some(|arg| arg.is_label()),
-                Some(|arg| arg.is_readable()),
-            ),
-            OpCode::Jne => self.convert_to_bytecode(
+
+            OpCode::Jeq | OpCode::Jne => self.convert_to_bytecode(
                 opcode,
                 arg1,
                 arg2,
