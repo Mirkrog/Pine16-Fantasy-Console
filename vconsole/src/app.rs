@@ -1,5 +1,4 @@
 use pixels::SurfaceTexture;
-use std::mem::transmute;
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;

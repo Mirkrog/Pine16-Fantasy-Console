@@ -22,7 +22,6 @@ enum OpCode {
     Sub,
     Mul,
     Div,
-    Exit,
     Stall,
     Mov,
     Jmp,
@@ -40,15 +39,14 @@ impl OpCode {
             2 => Ok(OpCode::Sub),
             3 => Ok(OpCode::Mul),
             4 => Ok(OpCode::Div),
-            5 => Ok(OpCode::Exit),
-            6 => Ok(OpCode::Stall),
-            7 => Ok(OpCode::Mov),
-            8 => Ok(OpCode::Jmp),
-            9 => Ok(OpCode::Jeq),
-            10 => Ok(OpCode::Jne),
-            11 => Ok(OpCode::And),
-            12 => Ok(OpCode::Or),
-            13 => Ok(OpCode::Xor),
+            5 => Ok(OpCode::Stall),
+            6 => Ok(OpCode::Mov),
+            7 => Ok(OpCode::Jmp),
+            8 => Ok(OpCode::Jeq),
+            9 => Ok(OpCode::Jne),
+            10 => Ok(OpCode::And),
+            11 => Ok(OpCode::Or),
+            12 => Ok(OpCode::Xor),
             other => Err(format!("Unknown OpCode: {other}")),
         }
     }
@@ -204,10 +202,6 @@ impl Console {
                     self.write_arg(&instruction.arg1, result);
                 }
                 OpCode::Stall => self.stall_timer = self.read_arg(&instruction.arg1),
-                OpCode::Exit => {
-                    self.exit_code = self.read_arg(&instruction.arg1);
-                    return; // TODO: implement exit
-                }
                 // TODO: add longjumps
                 // we have to jump to the address - 1 because the program_counter is incremented after this
                 OpCode::Jmp => {

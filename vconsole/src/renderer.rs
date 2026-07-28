@@ -63,18 +63,18 @@ impl Renderer {
             .chunks_exact(2)
             .enumerate()
         {
+            let frame = self
+                .pixel_buffer
+                .as_mut()
+                .expect("Tried to draw to uninitialized Pixels canvas")
+                .frame_mut();
             for (pixel_chunk_x, half_row) in row.iter().enumerate() {
                 let target_x = x + pixel_chunk_x * 4;
                 let target_y = y + pixel_y;
+                if target_x + 4 >= CANVAS_WIDTH || target_y >= CAVAS_HEIGHT {
+                    continue;
+                }
                 for x_offset in 0..4 {
-                    let pixel = self
-                        .pixel_buffer
-                        .as_mut()
-                        .expect("Tried to draw to uninitialized Pixels canvas")
-                        .frame_mut()
-                        .chunks_exact_mut(4)
-                        .nth(target_x + x_offset + target_y * CANVAS_WIDTH)
-                        .unwrap_or_else(|| panic!("Pixel coordinate: ({target_x}, {target_y}) out of range: ({CANVAS_WIDTH}, {CAVAS_HEIGHT})"));
                     let shift = (3 - x_offset) * 4;
                     let color_id = ((half_row >> shift) & 0x000F) as usize;
                     if color_id == 0 {
@@ -85,10 +85,10 @@ impl Renderer {
                     }
                     let color = ram_slice[PALETTE_OFFSET + color_id];
                     let (red, green, blue) = rgb_from_rgb565(color);
-                    pixel[0] = red;
-                    pixel[1] = green;
-                    pixel[2] = blue;
-                    pixel[3] = 0xff;
+                    frame[(target_x + x_offset + target_y * CANVAS_WIDTH) * 4] = red;
+                    frame[(target_x + x_offset + target_y * CANVAS_WIDTH) * 4 + 1] = green;
+                    frame[(target_x + x_offset + target_y * CANVAS_WIDTH) * 4 + 2] = blue;
+                    frame[(target_x + x_offset + target_y * CANVAS_WIDTH) * 4 + 3] = 0xff;
                 }
             }
         }
@@ -96,8 +96,8 @@ impl Renderer {
     /// reads the consoles memory to draw sprites to the Pixel buffer
     pub fn draw(&mut self, ram_slice: &[u16]) {
         let background_map = &ram_slice[TILEMAP_OFFSET..TILEMAP_OFFSET + 1000];
-        let spritelayer = &ram_slice[TILEMAP_OFFSET..TILEMAP_OFFSET + 2000];
-        let foreground_layer = &ram_slice[TILEMAP_OFFSET..TILEMAP_OFFSET + 3000];
+        let spritelayer = &ram_slice[TILEMAP_OFFSET + 1000..TILEMAP_OFFSET + 2000];
+        let foreground_layer = &ram_slice[TILEMAP_OFFSET + 2000..TILEMAP_OFFSET + 3000];
 
         //drawing the clear color
         let clear_color = ram_slice[300];
@@ -122,7 +122,7 @@ impl Renderer {
                 (tile_word & 0x00FF) as usize,
                 (tile_word & 0xFF00) as usize,
                 (i * 8) % CANVAS_WIDTH,
-                (i * 8) / CANVAS_WIDTH * 8,
+                (i / (CANVAS_WIDTH / 8)) * 8,
             );
         }
     }

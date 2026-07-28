@@ -12,7 +12,6 @@ enum OpCode {
     Sub,
     Mul,
     Div,
-    Exit,
     Stall,
     Mov,
     Jmp,
@@ -30,7 +29,6 @@ impl OpCode {
             "sub" => Ok(OpCode::Sub),
             "mul" => Ok(OpCode::Mul),
             "div" => Ok(OpCode::Div),
-            "exit" => Ok(OpCode::Exit),
             "stall" => Ok(OpCode::Stall),
             "mov" => Ok(OpCode::Mov),
             "jmp" => Ok(OpCode::Jmp),
@@ -204,6 +202,7 @@ impl Argument {
     pub fn is_register(&self) -> bool {
         matches!(self.arg_type, ArgumentType::Register(_))
     }
+    #[allow(unused)] // checking labels is useless because labels are just a type of immediate
     pub fn is_label(&self) -> bool {
         matches!(self.arg_type, ArgumentType::Label(_))
     }
@@ -402,18 +401,18 @@ impl<'a> Assembler<'a> {
                 Some(|arg| arg.is_writable()),
                 Some(|arg| arg.is_readable()),
             ),
-            OpCode::Exit | OpCode::Stall => {
+            OpCode::Stall => {
                 self.convert_to_bytecode(opcode, arg1, arg2, Some(|arg| arg.is_readable()), None)
             }
             OpCode::Jmp => {
-                self.convert_to_bytecode(opcode, arg1, arg2, Some(|arg| arg.is_label()), None)
+                self.convert_to_bytecode(opcode, arg1, arg2, Some(|arg| arg.is_readable()), None)
             }
 
             OpCode::Jeq | OpCode::Jne => self.convert_to_bytecode(
                 opcode,
                 arg1,
                 arg2,
-                Some(|arg| arg.is_label()),
+                Some(|arg| arg.is_readable()),
                 Some(|arg| arg.is_readable()),
             ),
         })
