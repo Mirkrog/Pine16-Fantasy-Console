@@ -12,7 +12,7 @@ fn main() {
     let stopwatch = Stopwatch::start_new();
 
     // 1. Catch the result of assemble() manually
-    let assembly = match Assembler::new(include_str!("test.v16.asm")).assemble() {
+    let assembly = match Assembler::new(include_str!("test.pineasm")).assemble() {
         Ok(data) => data,
         Err(err) => {
             eprintln!("{}: {err}", "error".red().bold());
@@ -20,7 +20,7 @@ fn main() {
         }
     };
 
-    let mut out_file = match File::create("test.v16.o") {
+    let mut out_file = match File::create("test.o") {
         Ok(file) => file,
         Err(err) => {
             eprintln!(
@@ -33,7 +33,7 @@ fn main() {
     };
 
     let mut buffer = [0u8; 20];
-    buffer[..17].copy_from_slice("V16ASSEMBLYCODE:D".as_bytes());
+    buffer[..17].copy_from_slice("PINE16ASSEMBLY :D".as_bytes());
     buffer[17] = env!("CARGO_PKG_VERSION_MAJOR").parse::<u8>().unwrap();
     buffer[18] = env!("CARGO_PKG_VERSION_MINOR").parse::<u8>().unwrap();
     buffer[19] = env!("CARGO_PKG_VERSION_PATCH").parse::<u8>().unwrap();

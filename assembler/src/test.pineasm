@@ -1,0 +1,159 @@
+; hello_rainbow.v16.asm
+; Draws "Hello World" and animates it using Palette Cycling!
+; (No commas version)
+
+; ---------------------------------------------------------
+; 1. CLEAR TILE MEMORY
+; ---------------------------------------------------------
+mov *A #1016
+mov *B #128
+
+clear_loop:
+mov $*A #0
+add *A #1
+sub *B #1
+jne clear_loop *B
+
+; ---------------------------------------------------------
+; 2. BUILD FONT DATA (Each tile gets a DIFFERENT color index!)
+; ---------------------------------------------------------
+
+; --- Tile 1: 'H' (Uses Color 1 -> 0x0111) ---
+mov $#1016 #0x0100
+mov $#1017 #0x0010
+mov $#1018 #0x0100
+mov $#1019 #0x0010
+mov $#1020 #0x0100
+mov $#1021 #0x0010
+mov $#1022 #0x0111
+mov $#1023 #0x1110
+mov $#1024 #0x0100
+mov $#1025 #0x0010
+mov $#1026 #0x0100
+mov $#1027 #0x0010
+mov $#1028 #0x0100
+mov $#1029 #0x0010
+
+; --- Tile 2: 'e' (Uses Color 2 -> 0x0222) ---
+mov $#1036 #0x0022
+mov $#1037 #0x2200
+mov $#1038 #0x0200
+mov $#1039 #0x0020
+mov $#1040 #0x0222
+mov $#1041 #0x2220
+mov $#1042 #0x0200
+mov $#1044 #0x0022
+mov $#1045 #0x2200
+
+; --- Tile 3: 'l' (Uses Color 3 -> 0x0333) ---
+mov $#1048 #0x0330
+mov $#1050 #0x0030
+mov $#1052 #0x0030
+mov $#1054 #0x0030
+mov $#1056 #0x0030
+mov $#1058 #0x0030
+mov $#1060 #0x0333
+
+; --- Tile 4: 'o' (Uses Color 4 -> 0x0444) ---
+mov $#1068 #0x0044
+mov $#1069 #0x4400
+mov $#1070 #0x0400
+mov $#1071 #0x0040
+mov $#1072 #0x0400
+mov $#1073 #0x0040
+mov $#1074 #0x0400
+mov $#1075 #0x0040
+mov $#1076 #0x0044
+mov $#1077 #0x4400
+
+; --- Tile 5: ' ' (Space - Empty) ---
+
+; --- Tile 6: 'W' (Uses Color 5 -> 0x0555) ---
+mov $#1096 #0x0500
+mov $#1097 #0x0005
+mov $#1098 #0x0500
+mov $#1099 #0x0005
+mov $#1100 #0x0500
+mov $#1101 #0x0005
+mov $#1102 #0x0500
+mov $#1103 #0x5005
+mov $#1104 #0x0505
+mov $#1105 #0x0505
+mov $#1106 #0x0505
+mov $#1107 #0x0505
+mov $#1108 #0x0050
+mov $#1109 #0x0050
+
+; --- Tile 7: 'r' (Uses Color 6 -> 0x0666) ---
+mov $#1116 #0x0060
+mov $#1117 #0x6660
+mov $#1118 #0x0066
+mov $#1120 #0x0060
+mov $#1122 #0x0060
+mov $#1124 #0x0060
+
+; --- Tile 8: 'd' (Uses Color 7 -> 0x0777) ---
+mov $#1129 #0x0070
+mov $#1131 #0x0070
+mov $#1132 #0x0077
+mov $#1133 #0x7770
+mov $#1134 #0x0700
+mov $#1135 #0x0070
+mov $#1136 #0x0700
+mov $#1137 #0x0070
+mov $#1138 #0x0700
+mov $#1139 #0x0070
+mov $#1140 #0x0077
+mov $#1141 #0x7770
+
+
+; ---------------------------------------------------------
+; 3. DRAW TO SCREEN (Centered!)
+; Row 12, Column 14 -> Starting Address: $#4054
+; ---------------------------------------------------------
+mov $#4054 #1 ; 'H' (Color 1)
+mov $#4055 #2 ; 'e' (Color 2)
+mov $#4056 #3 ; 'l' (Color 3)
+mov $#4057 #3 ; 'l' (Color 3)
+mov $#4058 #4 ; 'o' (Color 4)
+mov $#4059 #5 ; ' ' 
+mov $#4060 #6 ; 'W' (Color 5)
+mov $#4061 #4 ; 'o' (Color 4)
+mov $#4062 #7 ; 'r' (Color 6)
+mov $#4063 #3 ; 'l' (Color 3)
+mov $#4064 #8 ; 'd' (Color 7)
+
+
+; ---------------------------------------------------------
+; 4. ANIMATION LOOP (Palette Cycling)
+; ---------------------------------------------------------
+animation_loop:
+
+; Burn some cycles so the animation isn't instantly a blur.
+; (Your Rust loop runs FAST, so we stall heavily)
+mov *C #100    ; Number of massive stalls (increase to slow down)
+wait_loop:
+stall #65000
+sub *C #1
+jne wait_loop *C
+
+; Save the last color (Color 15 at $#315) so we don't lose it
+mov *C $#315
+
+; We need to copy 314->315, 313->314, all the way down to 301->302.
+mov *A #314   ; Source pointer
+mov *B #315   ; Destination pointer
+mov *D #14    ; We have 14 colors to shift over
+
+shift_loop:
+mov $*B $*A   ; Copy the color to the next slot
+sub *A #1     ; Move pointers back
+sub *B #1
+sub *D #1     ; Decrement counter
+jne shift_loop *D
+
+; Put our saved color 15 into the first slot ($#301)
+mov $#301 *C
+
+; Repeat forever!
+jmp animation_loop

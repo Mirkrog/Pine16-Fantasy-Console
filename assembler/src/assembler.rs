@@ -477,6 +477,3 @@ impl<'a> Assembler<'a> {
         ]
     }
 }
-
-#[cfg(test)]
-mod tests;

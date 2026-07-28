@@ -1,8 +1,10 @@
 use pixels::SurfaceTexture;
+use std::mem::transmute;
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
+use winit::platform::windows::{Color, WindowAttributesExtWindows};
 use winit::window::{Window, WindowAttributes, WindowId};
 
 use crate::console::Console;
@@ -24,7 +26,11 @@ impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window = Arc::new(
             event_loop
-                .create_window(WindowAttributes::default())
+                .create_window(
+                    WindowAttributes::default()
+                        .with_title("Pine16Console")
+                        .with_title_background_color(Some(Color::from_rgb(128, 128, 128))),
+                )
                 .unwrap(),
         );
 
@@ -54,7 +60,7 @@ impl ApplicationHandler for App {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let _ = event_loop;
         if !self.console.is_rom_loaded() {
-            self.console.load_rom_from_path("test.v16.o").unwrap();
+            self.console.load_rom_from_path("test.o").unwrap();
         }
         self.console.step();
 
