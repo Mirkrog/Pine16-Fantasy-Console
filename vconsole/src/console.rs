@@ -125,7 +125,6 @@ pub struct Console {
     sram: Vec<u16>,
     program_counter: u16,
     stall_timer: u16,
-    exit_code: u16,
     registers: [u16; 4],
 }
 
@@ -137,7 +136,6 @@ impl Console {
             sram: vec![0; sram_size],
             program_counter: 0,
             stall_timer: 0,
-            exit_code: 0,
             registers: [0; 4],
         }
     }
@@ -203,7 +201,6 @@ impl Console {
                 }
                 OpCode::Stall => self.stall_timer = self.read_arg(&instruction.arg1),
                 // TODO: add longjumps
-                // we have to jump to the address - 1 because the program_counter is incremented after this
                 OpCode::Jmp => {
                     self.program_counter = self.read_arg(&instruction.arg1);
                     jumped = true;
@@ -232,7 +229,6 @@ impl Console {
             // check if we reached the end of the program
             if self.program_counter as usize >= self.rom.len() / 3 {
                 self.program_counter = 0;
-                // TODO: implement exit
             }
         }
 
