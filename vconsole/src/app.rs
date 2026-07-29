@@ -3,6 +3,7 @@ use std::sync::Arc;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
+#[cfg(windows)]
 use winit::platform::windows::{Color, WindowAttributesExtWindows};
 use winit::window::{Window, WindowAttributes, WindowId};
 
@@ -21,17 +22,21 @@ impl App {
         }
     }
 }
+
+fn window_attributes() -> WindowAttributes {
+    let attributes = WindowAttributes::default().with_title("Pine16Console");
+
+    // The title-bar background color is a Windows-only winit extension.
+    #[cfg(windows)]
+    let attributes =
+        attributes.with_title_background_color(Some(Color::from_rgb(128, 128, 128)));
+
+    attributes
+}
+
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let window = Arc::new(
-            event_loop
-                .create_window(
-                    WindowAttributes::default()
-                        .with_title("Pine16Console")
-                        .with_title_background_color(Some(Color::from_rgb(128, 128, 128))),
-                )
-                .unwrap(),
-        );
+        let window = Arc::new(event_loop.create_window(window_attributes()).unwrap());
 
         self.console.resume_renderer(SurfaceTexture::new(
             window.inner_size().width,
