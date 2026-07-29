@@ -122,25 +122,25 @@ enum MemoryPois {
 pub struct Console {
     renderer: Renderer,
     rom: Vec<u16>,
-    sram: Vec<u16>,
+    sram: [u16; u16::MAX as usize],
     program_counter: u16,
     stall_timer: u16,
     registers: [u16; 4],
 }
 
 impl Console {
-    pub fn new(sram_size: usize) -> Self {
+    pub fn new() -> Self {
         Self {
             renderer: Renderer::new(),
             rom: Vec::new(),
-            sram: vec![0; sram_size],
+            sram: [0; u16::MAX as usize],
             program_counter: 0,
             stall_timer: 0,
             registers: [0; 4],
         }
     }
     pub fn default() -> Self {
-        Self::new(64 * 1000)
+        Self::new()
     }
     pub fn is_rom_loaded(&self) -> bool {
         !self.rom.is_empty()
@@ -156,19 +156,20 @@ impl Console {
         self.renderer.resize_surface(size.width, size.height);
     }
     pub fn step(&mut self) {
-        let stopwatch = Stopwatch::start_new();
-        while stopwatch.ms() < 50.0 {
+        let mut step_counter: usize = 0;
+        while step_counter < 10000000 {
             // incrementing the cpu counter (it is just for user purposes, so it doesn't need to exist outside ram)
             self.sram[MemoryPois::CPUCycleCounter as usize] =
                 self.sram[MemoryPois::CPUCycleCounter as usize].wrapping_add(1);
-
-            self.sram[MemoryPois::ProgramCounter as usize] = self.program_counter;
 
             // we just skip the current cpu cycle if we are still stalling
             if self.stall_timer > 0 {
                 self.stall_timer -= 1;
                 continue;
             }
+
+            // incrementing program counter
+            self.sram[MemoryPois::ProgramCounter as usize] = self.program_counter;
 
             let instruction = self.parse_next_instruction();
 
@@ -230,11 +231,11 @@ impl Console {
             if self.program_counter as usize >= self.rom.len() / 3 {
                 self.program_counter = 0;
             }
+
+            step_counter += 1;
         }
 
         self.renderer.draw(&self.sram);
-
-        println!("step took: {}ms", stopwatch.ms())
     }
     fn read_arg(&self, arg: &Argument) -> u16 {
         match arg.arg_type {
@@ -286,8 +287,11 @@ impl Console {
     pub fn write_ram(&mut self, address: u16, value: u16) {
         if address >= 300 {
             self.sram[address as usize] = value;
+        } else {
+            panic!("Tried to write to read-only ram, address: {address}")
         }
     }
+    #[inline(always)]
     fn parse_next_instruction(&mut self) -> Instruction {
         Instruction::from_u16(
             &self

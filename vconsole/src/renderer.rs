@@ -51,7 +51,14 @@ impl Renderer {
             .resize_surface(width, height)
             .unwrap();
     }
-    pub fn draw_tile(&mut self, ram_slice: &[u16], id: usize, flags: usize, x: usize, y: usize) {
+    pub fn draw_tile(
+        &mut self,
+        ram_slice: &[u16; 65535],
+        id: usize,
+        flags: usize,
+        x: usize,
+        y: usize,
+    ) {
         if id >= 256 {
             panic!("Tile ID: {id} is out of bounds")
         }
@@ -94,7 +101,7 @@ impl Renderer {
         }
     }
     /// reads the consoles memory to draw sprites to the Pixel buffer
-    pub fn draw(&mut self, ram_slice: &[u16]) {
+    pub fn draw(&mut self, ram_slice: &[u16; 65535]) {
         let background_map = &ram_slice[TILEMAP_OFFSET..TILEMAP_OFFSET + 1000];
         let spritelayer = &ram_slice[TILEMAP_OFFSET + 1000..TILEMAP_OFFSET + 2000];
         let foreground_layer = &ram_slice[TILEMAP_OFFSET + 2000..TILEMAP_OFFSET + 3000];

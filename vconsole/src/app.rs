@@ -61,7 +61,10 @@ impl ApplicationHandler for App {
         if !self.console.is_rom_loaded() {
             self.console.load_rom_from_path("test.o").unwrap();
         }
+        let stopwatch = simple_stopwatch::Stopwatch::start_new();
         self.console.step();
+
+        println!("steps took: {}ms", stopwatch.ms());
 
         if let Some(window) = &self.window {
             window.request_redraw();

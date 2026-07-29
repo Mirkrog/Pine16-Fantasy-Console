@@ -131,7 +131,7 @@ animation_loop:
 
 ; Burn some cycles so the animation isn't instantly a blur.
 ; (Your Rust loop runs FAST, so we stall heavily)
-mov *C #100    ; Number of massive stalls (increase to slow down)
+mov *C #65000    ; Number of massive stalls (increase to slow down)
 wait_loop:
 stall #65000
 sub *C #1
