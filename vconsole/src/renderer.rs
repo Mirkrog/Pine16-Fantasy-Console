@@ -1,14 +1,12 @@
 use pixels::{Pixels, wgpu::Color};
-use std::sync::Arc;
-use winit::window::Window;
 
 const PALETTE_OFFSET: usize = 300;
 const TILESHEET_OFFSET: usize = 1000;
 const TILEMAP_OFFSET: usize = TILESHEET_OFFSET + 2560;
 
 // these are just for convenience and mustn't be changed
-const CANVAS_WIDTH: usize = 320;
-const CAVAS_HEIGHT: usize = 200;
+pub const CANVAS_WIDTH: usize = 320;
+pub const CAVAS_HEIGHT: usize = 200;
 
 pub struct Renderer {
     pixel_buffer: Option<Pixels<'static>>,
@@ -21,10 +19,7 @@ impl Renderer {
             surface_visible: true,
         }
     }
-    pub fn resume(&mut self, surface_texture: pixels::SurfaceTexture<Arc<Window>>) {
-        let mut pixel_buffer =
-            Pixels::new(CANVAS_WIDTH as u32, CAVAS_HEIGHT as u32, surface_texture).unwrap();
-
+    pub fn resume(&mut self, mut pixel_buffer: Pixels<'static>) {
         pixel_buffer.clear_color(Color {
             r: 0.2,
             g: 0.2,
@@ -45,11 +40,12 @@ impl Renderer {
             println!("Surface visible, enabling rendering");
             self.surface_visible = true;
         }
-        self.pixel_buffer
-            .as_mut()
-            .expect("Tried to resize, but pixelbuffer is uninitialized")
-            .resize_surface(width, height)
-            .unwrap();
+        match self.pixel_buffer.as_mut() {
+            Some(buffer) => buffer.resize_surface(width, height).unwrap(),
+            None => {
+                println!("Tried to resize uninitialized buffer")
+            }
+        }
     }
     pub fn draw_tile(
         &mut self,
@@ -78,7 +74,7 @@ impl Renderer {
             for (pixel_chunk_x, half_row) in row.iter().enumerate() {
                 let target_x = x + pixel_chunk_x * 4;
                 let target_y = y + pixel_y;
-                if target_x + 4 >= CANVAS_WIDTH || target_y >= CAVAS_HEIGHT {
+                if target_x >= CANVAS_WIDTH || target_y >= CAVAS_HEIGHT {
                     continue;
                 }
                 for x_offset in 0..4 {

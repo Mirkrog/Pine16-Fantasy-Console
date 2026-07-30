@@ -1,12 +1,30 @@
 [package]
 name = "vconsole"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 anyhow = "1.0.102"
 byteorder = "1.5.0"
+console_log = "1.1.0"
+futures = "0.3.33"
+gloo-net = "0.7.0"
+log = "0.4.33"
 pixels = "0.17.1"
 pollster = "0.4.0"
-simple-stopwatch = "0.1.4"
 winit = "0.30.13"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = "0.1.6"
+wgpu = { version = "29.0", features = ["webgl"]}
+wasm-bindgen = "0.2.126"
+wasm-bindgen-futures = "0.4.30"
+web-sys = { version = "0.3", features = [
+    "Document",
+    "Window",
+    "Element",
+]}
+web-time = "1.1"

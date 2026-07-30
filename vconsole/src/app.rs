@@ -1,53 +1,138 @@
-use pixels::SurfaceTexture;
-use std::{
-    sync::Arc,
-    thread::sleep,
-    time::{Duration, Instant},
-};
+use pixels::{Pixels, SurfaceTexture};
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::{Duration, Instant};
+use std::{sync::Arc, thread::sleep};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
-use winit::event_loop::ActiveEventLoop;
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 #[cfg(windows)]
 use winit::platform::windows::{Color, WindowAttributesExtWindows};
-use winit::window::{Window, WindowAttributes, WindowId};
+use winit::window::{Window, WindowId};
+
+#[cfg(target_arch = "wasm32")]
+use futures::channel::oneshot::{Receiver, Sender, channel};
+#[cfg(target_arch = "wasm32")]
+use web_time::Instant;
+#[cfg(target_arch = "wasm32")]
+use winit::platform::web::EventLoopExtWebSys;
 
 use crate::console::Console;
 
 pub struct App {
+    #[cfg(target_arch = "wasm32")]
+    proxy: Option<winit::event_loop::EventLoopProxy<Pixels<'static>>>,
+    #[cfg(target_arch = "wasm32")]
+    receiver: Option<Receiver<Vec<u8>>>,
     window: Option<Arc<Window>>,
     console: Console,
+    #[cfg(target_arch = "wasm32")]
+    last_step: Instant,
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(#[cfg(target_arch = "wasm32")] event_loop: &EventLoop<Pixels<'static>>) -> Self {
+        #[cfg(target_arch = "wasm32")]
+        let proxy = Some(event_loop.create_proxy());
         Self {
+            #[cfg(target_arch = "wasm32")]
+            proxy,
+            #[cfg(target_arch = "wasm32")]
+            receiver: None,
             window: None,
             console: Console::default(),
+            #[cfg(target_arch = "wasm32")]
+            last_step: Instant::now(),
         }
     }
 }
 
-fn window_attributes() -> WindowAttributes {
-    let attributes = WindowAttributes::default().with_title("Pine16Console");
-
-    // The title-bar background color is a Windows-only winit extension.
-    #[cfg(windows)]
-    let attributes = attributes.with_title_background_color(Some(Color::from_rgb(128, 128, 128)));
-
-    attributes
-}
-
-impl ApplicationHandler for App {
+impl ApplicationHandler<Pixels<'static>> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let window = Arc::new(event_loop.create_window(window_attributes()).unwrap());
+        #[allow(unused_mut)]
+        let mut window_attributes = Window::default_attributes();
 
-        self.console.resume_renderer(SurfaceTexture::new(
-            window.inner_size().width,
-            window.inner_size().height,
-            window.clone(),
-        ));
+        #[cfg(not(target_arch = "wasm32"))]
+        let window_attributes = window_attributes.with_title("Pine16VirtualConsole");
+
+        #[cfg(target_os = "windows")]
+        let window_attributes =
+            window_attributes.with_title_background_color(Some(Color::from_rgb(128, 128, 128)));
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            use wasm_bindgen::JsCast;
+            use wasm_bindgen::UnwrapThrowExt;
+            use winit::platform::web::WindowAttributesExtWebSys;
+
+            const CANVAS_ID: &str = "canvas";
+
+            let window = wgpu::web_sys::window().unwrap_throw();
+            let document = window.document().unwrap_throw();
+            let canvas = document.get_element_by_id(CANVAS_ID).unwrap_throw();
+            let html_canvas_element = canvas.unchecked_into();
+            window_attributes = window_attributes.with_canvas(Some(html_canvas_element));
+        }
+
+        let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let surface_texture = SurfaceTexture::new(
+                window.inner_size().width,
+                window.inner_size().height,
+                window.clone(),
+            );
+
+            self.console.resume_renderer(
+                Pixels::new(
+                    crate::renderer::CANVAS_WIDTH as u32,
+                    crate::renderer::CAVAS_HEIGHT as u32,
+                    surface_texture,
+                )
+                .unwrap(),
+            );
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let surface_texture = SurfaceTexture::new(40, 40, window.clone());
+
+            if let Some(proxy) = self.proxy.take() {
+                wasm_bindgen_futures::spawn_local(async move {
+                    use pixels::PixelsBuilder;
+
+                    assert!(
+                        proxy
+                            .send_event(
+                                PixelsBuilder::new(
+                                    crate::renderer::CANVAS_WIDTH as u32,
+                                    crate::renderer::CAVAS_HEIGHT as u32,
+                                    surface_texture,
+                                )
+                                .wgpu_backend(wgpu::Backends::GL)
+                                .build_async()
+                                .await
+                                .unwrap()
+                            )
+                            .is_ok()
+                    )
+                });
+            }
+        }
 
         self.window = Some(window);
+    }
+    #[allow(unused_mut)]
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, mut event: Pixels<'static>) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.console.resume_renderer(event);
+            self.console.resize_renderer(
+                self.window
+                    .as_ref()
+                    .expect("Window disappeared")
+                    .inner_size(),
+            );
+        }
     }
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
@@ -79,18 +164,106 @@ impl ApplicationHandler for App {
     }
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let _ = event_loop;
-        if !self.console.is_rom_loaded() {
-            self.console.load_rom_from_path("test.o").unwrap();
-        }
-        let now = Instant::now();
-        self.console.step();
 
-        if let Some(window) = &self.window {
-            window.request_redraw();
-        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if !self.console.is_rom_loaded() {
+                use std::{fs::File, io::Read};
+                let mut bytes = Vec::new();
+                File::open("test.o")
+                    .unwrap()
+                    .read_to_end(&mut bytes)
+                    .unwrap();
+                self.console.load_rom_from_bytes(bytes).unwrap();
+            }
 
-        sleep(Duration::from_millis(
-            ((1.0 / 30.0) * 1000.0) as u64 - now.elapsed().subsec_millis() as u64,
-        ));
+            let now = Instant::now();
+            self.console.step();
+
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
+
+            sleep(Duration::from_millis(
+                ((1.0 / 30.0) * 1000.0) as u64 - now.elapsed().subsec_millis() as u64,
+            ));
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            if !self.console.is_rom_loaded() {
+                if let Some(rx) = &mut self.receiver {
+                    match rx.try_recv() {
+                        Ok(Some(bytes)) => {
+                            println!("Bytes arrived! Size: {}", bytes.len());
+
+                            self.console.load_rom_from_bytes(bytes).unwrap()
+                        }
+                        Ok(None) | Err(_) => {
+                            return;
+                        }
+                    }
+                } else {
+                    let (tx, rx) = channel::<Vec<u8>>();
+                    self.receiver = Some(rx);
+
+                    wasm_bindgen_futures::spawn_local(async move {
+                        let bytes = get_bytes_from_url("./test.o".to_string()).await;
+                        match bytes {
+                            Some(bytes) => {
+                                tx.send(bytes).unwrap();
+                            }
+                            None => drop(tx),
+                        }
+                    });
+                    return;
+                }
+            }
+
+            if self.last_step.elapsed().subsec_millis() as u64 > ((1.0 / 30.0) * 1000.0) as u64 {
+                self.console.step();
+
+                self.last_step = Instant::now();
+            }
+
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
+        }
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn get_bytes_from_url(url: String) -> Option<Vec<u8>> {
+    use gloo_net::http::Request;
+
+    let response = Request::get(&url).send().await.unwrap();
+
+    if !response.ok() {
+        return None;
+    }
+
+    Some(response.binary().await.unwrap())
+}
+
+pub fn run() -> anyhow::Result<()> {
+    let event_loop = EventLoop::with_user_event().build()?;
+    event_loop.set_control_flow(ControlFlow::Poll);
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        wasm_bindgen::UnwrapThrowExt::unwrap_throw(console_log::init_with_level(log::Level::Info));
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let mut app = App::new();
+        event_loop.run_app(&mut app)?;
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let app = App::new(&event_loop);
+        event_loop.spawn_app(app);
+    }
+
+    Ok(())
 }

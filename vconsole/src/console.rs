@@ -1,18 +1,6 @@
-use byteorder::{LittleEndian, ReadBytesExt};
-use simple_stopwatch::Stopwatch;
-use std::{
-    ops::{BitAnd, BitOr, BitXor},
-    sync::Arc,
-};
-use winit::{dpi::PhysicalSize, keyboard, window::Window};
-
-use std::{
-    fs::File,
-    io::{BufReader, Read},
-    io::{Seek, SeekFrom},
-};
-
 use crate::renderer::Renderer;
+use std::ops::{BitAnd, BitOr, BitXor};
+use winit::{dpi::PhysicalSize, keyboard};
 
 #[repr(u8)]
 #[derive(PartialEq, Eq, Debug)]
@@ -154,8 +142,8 @@ impl Console {
         !self.rom.is_empty()
     }
     /// Creates everything to be able to render
-    pub fn resume_renderer(&mut self, surface_texture: pixels::SurfaceTexture<Arc<Window>>) {
-        self.renderer.resume(surface_texture);
+    pub fn resume_renderer(&mut self, pixel_buffer: pixels::Pixels<'static>) {
+        self.renderer.resume(pixel_buffer);
     }
     pub fn render(&mut self) {
         self.renderer.render();
@@ -356,31 +344,15 @@ impl Console {
         )
         .unwrap()
     }
-    pub fn load_rom_from_path(&mut self, path: &str) -> anyhow::Result<()> {
-        let watch = Stopwatch::start_new();
+    pub fn load_rom_from_bytes(&mut self, bytes: Vec<u8>) -> anyhow::Result<()> {
+        compare_version(&bytes[17..20]);
 
-        let file = File::open(path)?;
-        let metadata = file.metadata()?;
-        let file_size_bytes = metadata.len();
-        let u16_capacity = (file_size_bytes / 2 - 10) as usize; // Ignoring the Magic and Version
-        let mut reader = BufReader::new(file);
-        self.rom = Vec::with_capacity(u16_capacity);
-
-        // The secret is ignored when assembling so it is also ignored when interpreting
-        reader.seek(SeekFrom::Start(17))?;
-
-        let mut version_bytes: [u8; 3] = [0; 3];
-        reader.read_exact(&mut version_bytes)?;
-        compare_version(version_bytes);
-
-        for _ in 0..u16_capacity {
-            self.rom.push(match reader.read_u16::<LittleEndian>() {
-                Ok(value) => value,
-                Err(e) => {
-                    panic!("{}", e)
-                }
-            });
-        }
+        self.rom = bytes
+            .get(20..) // skip header (magic + version)
+            .unwrap_or(&[])
+            .chunks_exact(2)
+            .map(|v| u16::from_le_bytes([v[0], v[1]]))
+            .collect();
         // initializing read only flags
         self.sram[MemoryPois::MajorConsoleVersion as usize] =
             env!("CARGO_PKG_VERSION_MAJOR").parse::<u16>().unwrap();
@@ -388,9 +360,9 @@ impl Console {
             env!("CARGO_PKG_VERSION_MINOR").parse::<u16>().unwrap();
         self.sram[MemoryPois::PatchConsoleVersion as usize] =
             env!("CARGO_PKG_VERSION_PATCH").parse::<u16>().unwrap();
-        self.sram[MemoryPois::MajorROMVersion as usize] = version_bytes[0] as u16;
-        self.sram[MemoryPois::MinorROMVersion as usize] = version_bytes[1] as u16;
-        self.sram[MemoryPois::PatchROMVersion as usize] = version_bytes[2] as u16;
+        self.sram[MemoryPois::MajorROMVersion as usize] = bytes[17] as u16;
+        self.sram[MemoryPois::MinorROMVersion as usize] = bytes[18] as u16;
+        self.sram[MemoryPois::PatchROMVersion as usize] = bytes[19] as u16;
 
         // initializing palette
         self.sram[301] = 0x18E5; // Index 1:  Deep Night
@@ -409,13 +381,13 @@ impl Console {
         self.sram[314] = 0xF747; // Index 14: Electric Lemon
         self.sram[315] = 0x2EF1; // Index 15: Minty Green
 
-        println!("Loaded ROM in: {}ms", watch.ms());
         Ok(())
     }
 }
 
 /// Compares version bytes with the version of the console
-fn compare_version(version_bytes: [u8; 3]) {
+fn compare_version(version_bytes: &[u8]) {
+    assert_eq!(version_bytes.len(), 3);
     let major_version = env!("CARGO_PKG_VERSION_MAJOR").parse::<u8>().unwrap();
     let minor_version = env!("CARGO_PKG_VERSION_MINOR").parse::<u8>().unwrap();
     let patch_version = env!("CARGO_PKG_VERSION_PATCH").parse::<u8>().unwrap();
