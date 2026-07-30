@@ -129,13 +129,12 @@ mov $#4064 #8 ; 'd' (Color 7)
 ; ---------------------------------------------------------
 animation_loop:
 
-; Burn some cycles so the animation isn't instantly a blur.
-; (Your Rust loop runs FAST, so we stall heavily)
-mov *C #65000    ; Number of massive stalls (increase to slow down)
-wait_loop:
-stall #65000
-sub *C #1
-jne wait_loop *C
+; await VBLANK
+mov *A #5
+await_loop:
+await #8
+sub *A #1
+jne await_loop *A
 
 ; Save the last color (Color 15 at $#315) so we don't lose it
 mov *C $#315

@@ -1,5 +1,9 @@
 use pixels::SurfaceTexture;
-use std::sync::Arc;
+use std::{
+    sync::Arc,
+    thread::sleep,
+    time::{Duration, Instant},
+};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::ActiveEventLoop;
@@ -28,8 +32,7 @@ fn window_attributes() -> WindowAttributes {
 
     // The title-bar background color is a Windows-only winit extension.
     #[cfg(windows)]
-    let attributes =
-        attributes.with_title_background_color(Some(Color::from_rgb(128, 128, 128)));
+    let attributes = attributes.with_title_background_color(Some(Color::from_rgb(128, 128, 128)));
 
     attributes
 }
@@ -66,13 +69,15 @@ impl ApplicationHandler for App {
         if !self.console.is_rom_loaded() {
             self.console.load_rom_from_path("test.o").unwrap();
         }
-        let stopwatch = simple_stopwatch::Stopwatch::start_new();
+        let now = Instant::now();
         self.console.step();
-
-        println!("steps took: {}ms", stopwatch.ms());
 
         if let Some(window) = &self.window {
             window.request_redraw();
         }
+
+        sleep(Duration::from_millis(
+            ((1.0 / 30.0) * 1000.0) as u64 - now.elapsed().subsec_millis() as u64,
+        ));
     }
 }

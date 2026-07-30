@@ -23,6 +23,7 @@ enum OpCode {
     Mul,
     Div,
     Stall,
+    Await,
     Mov,
     Jmp,
     Jeq,
@@ -40,13 +41,14 @@ impl OpCode {
             3 => Ok(OpCode::Mul),
             4 => Ok(OpCode::Div),
             5 => Ok(OpCode::Stall),
-            6 => Ok(OpCode::Mov),
-            7 => Ok(OpCode::Jmp),
-            8 => Ok(OpCode::Jeq),
-            9 => Ok(OpCode::Jne),
-            10 => Ok(OpCode::And),
-            11 => Ok(OpCode::Or),
-            12 => Ok(OpCode::Xor),
+            6 => Ok(OpCode::Await),
+            7 => Ok(OpCode::Mov),
+            8 => Ok(OpCode::Jmp),
+            9 => Ok(OpCode::Jeq),
+            10 => Ok(OpCode::Jne),
+            11 => Ok(OpCode::And),
+            12 => Ok(OpCode::Or),
+            13 => Ok(OpCode::Xor),
             other => Err(format!("Unknown OpCode: {other}")),
         }
     }
@@ -117,6 +119,7 @@ enum MemoryPois {
     PatchROMVersion = 0x0005,
     CPUCycleCounter = 0x0006,
     ProgramCounter = 0x0007,
+    VblankFlag = 0x0008,
 }
 
 pub struct Console {
@@ -124,6 +127,7 @@ pub struct Console {
     rom: Vec<u16>,
     sram: [u16; u16::MAX as usize],
     program_counter: u16,
+    currently_awaiting: Option<u16>,
     stall_timer: u16,
     registers: [u16; 4],
 }
@@ -134,6 +138,7 @@ impl Console {
             renderer: Renderer::new(),
             rom: Vec::new(),
             sram: [0; u16::MAX as usize],
+            currently_awaiting: None,
             program_counter: 0,
             stall_timer: 0,
             registers: [0; 4],
@@ -156,11 +161,25 @@ impl Console {
         self.renderer.resize_surface(size.width, size.height);
     }
     pub fn step(&mut self) {
-        let mut step_counter: usize = 0;
-        while step_counter < 10000000 {
+        const STEP_RATE: f32 = 30.0; // steps per second
+        const MHZ: f32 = 2.0;
+
+        // setting the vblank flag
+        self.sram[MemoryPois::VblankFlag as usize] = 0x0001;
+
+        let mut step_counter: u32 = 0;
+        while step_counter < ((MHZ * 1_000_000.0) / STEP_RATE) as u32 {
             // incrementing the cpu counter (it is just for user purposes, so it doesn't need to exist outside ram)
             self.sram[MemoryPois::CPUCycleCounter as usize] =
                 self.sram[MemoryPois::CPUCycleCounter as usize].wrapping_add(1);
+
+            if let Some(awaiting) = self.currently_awaiting {
+                if self.sram[awaiting as usize] == 0 {
+                    break;
+                } else {
+                    self.currently_awaiting = None
+                }
+            }
 
             // we just skip the current cpu cycle if we are still stalling
             if self.stall_timer > 0 {
@@ -200,6 +219,7 @@ impl Console {
 
                     self.write_arg(&instruction.arg1, result);
                 }
+                OpCode::Await => self.currently_awaiting = Some(self.read_arg(&instruction.arg1)),
                 OpCode::Stall => self.stall_timer = self.read_arg(&instruction.arg1),
                 // TODO: add longjumps
                 OpCode::Jmp => {
@@ -230,6 +250,11 @@ impl Console {
             // check if we reached the end of the program
             if self.program_counter as usize >= self.rom.len() / 3 {
                 self.program_counter = 0;
+            }
+
+            if step_counter == 0 {
+                // setting the vblank flag back to 0
+                self.sram[MemoryPois::VblankFlag as usize] = 0x0000;
             }
 
             step_counter += 1;

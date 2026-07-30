@@ -32,7 +32,7 @@ impl Renderer {
             a: 1.0,
         });
         pixel_buffer.set_scaling_mode(pixels::ScalingMode::Fill);
-        pixel_buffer.enable_vsync(true);
+        pixel_buffer.enable_vsync(false);
 
         self.pixel_buffer = Some(pixel_buffer);
     }

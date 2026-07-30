@@ -13,6 +13,7 @@ enum OpCode {
     Mul,
     Div,
     Stall,
+    Await,
     Mov,
     Jmp,
     Jeq,
@@ -30,6 +31,7 @@ impl OpCode {
             "mul" => Ok(OpCode::Mul),
             "div" => Ok(OpCode::Div),
             "stall" => Ok(OpCode::Stall),
+            "await" => Ok(OpCode::Await),
             "mov" => Ok(OpCode::Mov),
             "jmp" => Ok(OpCode::Jmp),
             "jeq" => Ok(OpCode::Jeq),
@@ -401,10 +403,7 @@ impl<'a> Assembler<'a> {
                 Some(|arg| arg.is_writable()),
                 Some(|arg| arg.is_readable()),
             ),
-            OpCode::Stall => {
-                self.convert_to_bytecode(opcode, arg1, arg2, Some(|arg| arg.is_readable()), None)
-            }
-            OpCode::Jmp => {
+            OpCode::Stall | OpCode::Jmp | OpCode::Await => {
                 self.convert_to_bytecode(opcode, arg1, arg2, Some(|arg| arg.is_readable()), None)
             }
 
