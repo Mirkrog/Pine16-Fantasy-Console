@@ -58,6 +58,19 @@ impl ApplicationHandler for App {
             WindowEvent::RedrawRequested => {
                 self.console.render();
             }
+            WindowEvent::KeyboardInput {
+                device_id,
+                event,
+                is_synthetic,
+            } => {
+                let _ = device_id;
+                let _ = is_synthetic;
+                if event.state.is_pressed() {
+                    self.console.key_pressed(event.logical_key);
+                } else {
+                    self.console.key_released(event.logical_key);
+                }
+            }
             WindowEvent::Resized(size) => {
                 self.console.resize_renderer(size);
             }

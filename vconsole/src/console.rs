@@ -4,7 +4,7 @@ use std::{
     ops::{BitAnd, BitOr, BitXor},
     sync::Arc,
 };
-use winit::{dpi::PhysicalSize, window::Window};
+use winit::{dpi::PhysicalSize, keyboard, window::Window};
 
 use std::{
     fs::File,
@@ -120,6 +120,7 @@ enum MemoryPois {
     CPUCycleCounter = 0x0006,
     ProgramCounter = 0x0007,
     VblankFlag = 0x0008,
+    CurrentPressedKeyASCII = 0x0009,
 }
 
 pub struct Console {
@@ -130,6 +131,7 @@ pub struct Console {
     currently_awaiting: Option<u16>,
     stall_timer: u16,
     registers: [u16; 4],
+    last_pressed_key: Option<keyboard::Key>,
 }
 
 impl Console {
@@ -142,6 +144,7 @@ impl Console {
             program_counter: 0,
             stall_timer: 0,
             registers: [0; 4],
+            last_pressed_key: None,
         }
     }
     pub fn default() -> Self {
@@ -159,6 +162,25 @@ impl Console {
     }
     pub fn resize_renderer(&mut self, size: PhysicalSize<u32>) {
         self.renderer.resize_surface(size.width, size.height);
+    }
+    pub fn key_pressed(&mut self, key: keyboard::Key) {
+        if let Some(text) = key.to_text()
+            && text.is_ascii()
+        {
+            let ascii = text
+                .bytes()
+                .next()
+                .expect("Key cannot be converted to bytes");
+
+            self.sram[MemoryPois::CurrentPressedKeyASCII as usize] = ascii as u16;
+
+            self.last_pressed_key = Some(key);
+        }
+    }
+    pub fn key_released(&mut self, key: keyboard::Key) {
+        if self.last_pressed_key == Some(key) {
+            self.sram[MemoryPois::CurrentPressedKeyASCII as usize] = 0;
+        }
     }
     pub fn step(&mut self) {
         const STEP_RATE: f32 = 30.0; // steps per second
@@ -400,9 +422,11 @@ fn compare_version(version_bytes: [u8; 3]) {
 
     if major_version != version_bytes[0] || minor_version != version_bytes[1] {
         panic!(
-            "Rom is not compatible (console_ver: {}, bin_ver: {:?})",
+            "Rom is not compatible (console_ver: {}, bin_ver: {}.{}.{})",
             env!("CARGO_PKG_VERSION"),
-            version_bytes
+            version_bytes[0],
+            version_bytes[1],
+            version_bytes[2]
         )
     }
     if patch_version != version_bytes[2] {
