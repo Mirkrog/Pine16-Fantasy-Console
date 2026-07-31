@@ -3,9 +3,11 @@ use colored::Colorize;
 use miette::{NamedSource, SourceSpan};
 use simple_stopwatch::Stopwatch;
 use std::collections::HashMap;
+use std::mem::transmute;
 use std::path::PathBuf;
 use std::{fs::File, io::Write};
 
+use crate::assembler::OpCode::Jsr;
 use crate::assemblererror::AssemblerError;
 
 #[repr(u8)]
@@ -25,6 +27,12 @@ enum OpCode {
     And,
     Or,
     Xor,
+    Shl,
+    Shr,
+    Push,
+    Pop,
+    Jsr,
+    Rtr,
 }
 impl OpCode {
     fn from_str(string: &str, file_byte_index: usize) -> Result<Self, AssemblerError> {
@@ -43,6 +51,12 @@ impl OpCode {
             "and" => Ok(OpCode::And),
             "or" => Ok(OpCode::Or),
             "xor" => Ok(OpCode::Xor),
+            "shl" => Ok(OpCode::Shl),
+            "shr" => Ok(OpCode::Shr),
+            "push" => Ok(OpCode::Push),
+            "pop" => Ok(OpCode::Pop),
+            "jsr" => Ok(OpCode::Jsr),
+            "rtr" => Ok(OpCode::Rtr),
             other => Err(AssemblerError::UnknownOpCode {
                 opcode: other.to_string(),
                 span: SourceSpan::new(file_byte_index.into(), string.len()),
@@ -57,6 +71,7 @@ pub enum Register {
     B,
     C,
     D,
+    SP,
 }
 impl Register {
     fn parse_register(string: &str, file_byte_index: usize) -> Result<Self, AssemblerError> {
@@ -65,6 +80,7 @@ impl Register {
             "B" => Ok(Self::B),
             "C" => Ok(Self::C),
             "D" => Ok(Self::D),
+            "SP" => Ok(Self::SP),
             other => Err(AssemblerError::UnknownRegister {
                 register: other.to_string(),
                 span: SourceSpan::new(file_byte_index.into(), other.len()),
@@ -322,7 +338,7 @@ impl<'a> Assembler<'a> {
         }
     }
     /// Actually creating the output assembly
-    fn assemble_instruction(&mut self, instruction: &str) -> Option<[u16; 3]> {
+    fn assemble_instruction(&mut self, mut instruction: &str) -> Option<[u16; 3]> {
         let source_start_ptr = self.source.as_ptr() as usize;
 
         if instruction.contains(':') {
@@ -340,17 +356,45 @@ impl<'a> Assembler<'a> {
                 return None;
             }
         }
-        let mut tokens = instruction.split_whitespace();
+        let mut opcode_obstructed = false;
+        let trimmed_instruction = instruction.trim();
+        if trimmed_instruction.starts_with(',') {
+            self.errors.push(AssemblerError::MisplacedComma {
+                span: SourceSpan::new(
+                    (trimmed_instruction.as_ptr() as usize - source_start_ptr).into(),
+                    1,
+                ),
+            });
+            opcode_obstructed = true;
+        }
+        if trimmed_instruction.ends_with(',') {
+            self.errors.push(AssemblerError::MisplacedComma {
+                span: SourceSpan::new(
+                    (trimmed_instruction.as_ptr() as usize - source_start_ptr
+                        + trimmed_instruction.len()
+                        - 1)
+                    .into(),
+                    1,
+                ),
+            });
+        }
+        let mut tokens = instruction
+            .split_whitespace()
+            .map(|token| token.split(',').next().unwrap());
 
         let opcode_token = tokens.next().unwrap();
-        let opcode = OpCode::from_str(
-            opcode_token.to_lowercase().as_str(),
-            opcode_token.as_ptr() as usize - source_start_ptr,
-        )
-        .unwrap_or_else(|e| {
-            self.errors.push(e);
+        let opcode = if !opcode_obstructed {
+            OpCode::from_str(
+                opcode_token.to_lowercase().as_str(),
+                opcode_token.as_ptr() as usize - source_start_ptr,
+            )
+            .unwrap_or_else(|e| {
+                self.errors.push(e);
+                OpCode::NoOp
+            })
+        } else {
             OpCode::NoOp
-        });
+        };
 
         if instruction.split_whitespace().collect::<Vec<&str>>().len() > 3 {
             self.errors.push(AssemblerError::TooManyArguments {
@@ -400,17 +444,22 @@ impl<'a> Assembler<'a> {
             | OpCode::Mov
             | OpCode::And
             | OpCode::Or
-            | OpCode::Xor => self.convert_to_bytecode(
+            | OpCode::Xor
+            | OpCode::Shl
+            | OpCode::Shr => self.convert_to_bytecode(
                 opcode,
                 arg1,
                 arg2,
                 Some(|arg| arg.is_writable()),
                 Some(|arg| arg.is_readable()),
             ),
-            OpCode::Stall | OpCode::Jmp | OpCode::Await => {
+            OpCode::Stall | OpCode::Jmp | OpCode::Await | OpCode::Push | OpCode::Jsr => {
                 self.convert_to_bytecode(opcode, arg1, arg2, Some(|arg| arg.is_readable()), None)
             }
-
+            OpCode::Rtr => self.convert_to_bytecode(opcode, arg1, arg2, None, None),
+            OpCode::Pop => {
+                self.convert_to_bytecode(opcode, arg1, arg2, Some(|arg| arg.is_writable()), None)
+            }
             OpCode::Jeq | OpCode::Jne => self.convert_to_bytecode(
                 opcode,
                 arg1,

@@ -1,5 +1,8 @@
 use crate::renderer::Renderer;
-use std::ops::{BitAnd, BitOr, BitXor};
+use std::{
+    mem::take,
+    ops::{BitAnd, BitOr, BitXor, Shl, Shr, Sub},
+};
 use winit::{dpi::PhysicalSize, keyboard};
 
 #[repr(u8)]
@@ -19,6 +22,12 @@ enum OpCode {
     And,
     Or,
     Xor,
+    Shl,
+    Shr,
+    Push,
+    Pop,
+    Jsr,
+    Rtr,
 }
 impl OpCode {
     fn from_u8(bytecode: u8) -> Result<OpCode, String> {
@@ -37,6 +46,10 @@ impl OpCode {
             11 => Ok(OpCode::And),
             12 => Ok(OpCode::Or),
             13 => Ok(OpCode::Xor),
+            14 => Ok(OpCode::Shl),
+            15 => Ok(OpCode::Shr),
+            16 => Ok(OpCode::Jsr),
+            17 => Ok(OpCode::Rtr),
             other => Err(format!("Unknown OpCode: {other}")),
         }
     }
@@ -118,7 +131,7 @@ pub struct Console {
     program_counter: u16,
     currently_awaiting: Option<u16>,
     stall_timer: u16,
-    registers: [u16; 4],
+    registers: [u16; 5],
     last_pressed_key: Option<keyboard::Key>,
 }
 
@@ -131,7 +144,7 @@ impl Console {
             currently_awaiting: None,
             program_counter: 0,
             stall_timer: 0,
-            registers: [0; 4],
+            registers: [0; 5],
             last_pressed_key: None,
         }
     }
@@ -212,7 +225,9 @@ impl Console {
                 | OpCode::Div
                 | OpCode::And
                 | OpCode::Or
-                | OpCode::Xor => {
+                | OpCode::Xor
+                | OpCode::Shl
+                | OpCode::Shr => {
                     let val1 = self.read_arg(&instruction.arg1);
                     let val2 = self.read_arg(&instruction.arg2);
 
@@ -224,6 +239,8 @@ impl Console {
                         OpCode::And => val1.bitand(val2),
                         OpCode::Or => val1.bitor(val2),
                         OpCode::Xor => val1.bitxor(val2),
+                        OpCode::Shl => val1.shl(val2),
+                        OpCode::Shr => val1.shr(val2),
                         _ => unreachable!(),
                     };
 
@@ -236,7 +253,6 @@ impl Console {
                     self.program_counter = self.read_arg(&instruction.arg1);
                     jumped = true;
                 }
-
                 OpCode::Mov => {
                     let val2 = self.read_arg(&instruction.arg2);
                     self.write_arg(&instruction.arg1, val2);
@@ -253,6 +269,18 @@ impl Console {
                         jumped = true;
                     }
                 }
+                OpCode::Push => {
+                    self.push_stack(self.read_arg(&instruction.arg1));
+                }
+                OpCode::Pop => {
+                    let value = self.pop_stack();
+                    self.write_arg(&instruction.arg1, value);
+                }
+                OpCode::Jsr => {
+                    self.push_stack(self.program_counter);
+                    self.program_counter = self.read_arg(&instruction.arg1);
+                }
+                OpCode::Rtr => self.program_counter = self.pop_stack(),
             }
             if !jumped {
                 self.program_counter += 1;
@@ -315,16 +343,26 @@ impl Console {
         }
     }
     #[inline(always)]
-    pub fn read_ram(&self, address: u16) -> u16 {
+    fn read_ram(&self, address: u16) -> u16 {
         self.sram[address as usize]
     }
     #[inline(always)]
-    pub fn write_ram(&mut self, address: u16, value: u16) {
+    fn write_ram(&mut self, address: u16, value: u16) {
         if address >= 300 {
             self.sram[address as usize] = value;
         } else {
             panic!("Tried to write to read-only ram, address: {address}")
         }
+    }
+    #[inline(always)]
+    fn push_stack(&mut self, value: u16) {
+        self.registers[4] += 1;
+        self.write_ram(u16::MAX - self.registers[4], value);
+    }
+    #[inline(always)]
+    fn pop_stack(&mut self) -> u16 {
+        self.registers[4] -= 1;
+        self.read_ram((u16::MAX - 1) - self.registers[4])
     }
     #[inline(always)]
     fn parse_next_instruction(&mut self) -> Instruction {

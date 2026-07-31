@@ -89,4 +89,13 @@ pub enum AssemblerError {
         #[label("here argument is defined again")]
         span1: SourceSpan,
     },
+    #[error("Misplaced comma")]
+    #[diagnostic(
+        code(assembler::misplaced_comma),
+        help("Commas should only be used to seperate parts of the instruction")
+    )]
+    MisplacedComma {
+        #[label("this comma is misplaced")]
+        span: SourceSpan,
+    },
 }
