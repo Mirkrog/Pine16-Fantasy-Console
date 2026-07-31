@@ -1,5 +1,7 @@
 use pixels::{Pixels, SurfaceTexture};
 #[cfg(not(target_arch = "wasm32"))]
+use std::path::PathBuf;
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::{Duration, Instant};
 use std::{sync::Arc, thread::sleep};
 use winit::application::ApplicationHandler;
@@ -25,12 +27,17 @@ pub struct App {
     receiver: Option<Receiver<Vec<u8>>>,
     window: Option<Arc<Window>>,
     console: Console,
+    #[cfg(not(target_arch = "wasm32"))]
+    cart_path: PathBuf,
     #[cfg(target_arch = "wasm32")]
     last_step: Instant,
 }
 
 impl App {
-    pub fn new(#[cfg(target_arch = "wasm32")] event_loop: &EventLoop<Pixels<'static>>) -> Self {
+    pub fn new(
+        #[cfg(target_arch = "wasm32")] event_loop: &EventLoop<Pixels<'static>>,
+        #[cfg(not(target_arch = "wasm32"))] cart_path: PathBuf,
+    ) -> Self {
         #[cfg(target_arch = "wasm32")]
         let proxy = Some(event_loop.create_proxy());
         Self {
@@ -40,6 +47,8 @@ impl App {
             receiver: None,
             window: None,
             console: Console::default(),
+            #[cfg(not(target_arch = "wasm32"))]
+            cart_path,
             #[cfg(target_arch = "wasm32")]
             last_step: Instant::now(),
         }
@@ -121,8 +130,8 @@ impl ApplicationHandler<Pixels<'static>> for App {
 
         self.window = Some(window);
     }
-    #[allow(unused_mut)]
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, mut event: Pixels<'static>) {
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: Pixels<'static>) {
+        let _ = event;
         #[cfg(target_arch = "wasm32")]
         {
             self.console.resume_renderer(event);
@@ -170,7 +179,7 @@ impl ApplicationHandler<Pixels<'static>> for App {
             if !self.console.is_rom_loaded() {
                 use std::{fs::File, io::Read};
                 let mut bytes = Vec::new();
-                File::open("test.o")
+                File::open(&self.cart_path)
                     .unwrap()
                     .read_to_end(&mut bytes)
                     .unwrap();
@@ -207,7 +216,7 @@ impl ApplicationHandler<Pixels<'static>> for App {
                     self.receiver = Some(rx);
 
                     wasm_bindgen_futures::spawn_local(async move {
-                        let bytes = get_bytes_from_url("./test.o".to_string()).await;
+                        let bytes = get_bytes_from_url("./AUTOLOAD.pinecart".to_string()).await;
                         match bytes {
                             Some(bytes) => {
                                 tx.send(bytes).unwrap();
@@ -245,7 +254,7 @@ async fn get_bytes_from_url(url: String) -> Option<Vec<u8>> {
     Some(response.binary().await.unwrap())
 }
 
-pub fn run() -> anyhow::Result<()> {
+pub fn run(#[cfg(not(target_arch = "wasm32"))] cart_path: PathBuf) -> anyhow::Result<()> {
     let event_loop = EventLoop::with_user_event().build()?;
     event_loop.set_control_flow(ControlFlow::Poll);
 
@@ -256,7 +265,10 @@ pub fn run() -> anyhow::Result<()> {
 
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let mut app = App::new();
+        let mut app = App::new(
+            #[cfg(not(target_arch = "wasm32"))]
+            cart_path,
+        );
         event_loop.run_app(&mut app)?;
     }
     #[cfg(target_arch = "wasm32")]

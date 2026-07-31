@@ -51,10 +51,12 @@ impl Renderer {
         &mut self,
         ram_slice: &[u16; 65535],
         id: usize,
-        flags: usize,
+        flags: u8,
         x: usize,
         y: usize,
     ) {
+        let x_flipped = (flags >> 1) & 1 == 1;
+        let y_flipped = flags & 1 == 1;
         if id >= 256 {
             panic!("Tile ID: {id} is out of bounds")
         }
@@ -72,8 +74,16 @@ impl Renderer {
             .enumerate()
         {
             for (pixel_chunk_x, half_row) in row.iter().enumerate() {
-                let target_x = x + pixel_chunk_x * 4;
-                let target_y = y + pixel_y;
+                let target_x = if x_flipped {
+                    8 - x + pixel_chunk_x * 4
+                } else {
+                    x + pixel_chunk_x * 4
+                };
+                let target_y = if y_flipped {
+                    8 - y + pixel_y
+                } else {
+                    y + pixel_y
+                };
                 if target_x >= CANVAS_WIDTH || target_y >= CAVAS_HEIGHT {
                     continue;
                 }
@@ -122,7 +132,7 @@ impl Renderer {
             self.draw_tile(
                 ram_slice,
                 (tile_word & 0x00FF) as usize,
-                (tile_word & 0xFF00) as usize,
+                (tile_word & 0xFF00) as u8,
                 (i * 8) % CANVAS_WIDTH,
                 (i / (CANVAS_WIDTH / 8)) * 8,
             );
@@ -135,7 +145,7 @@ impl Renderer {
             self.draw_tile(
                 ram_slice,
                 (tile_words[0] & 0x00FF) as usize,
-                (tile_words[0] & 0xFF00) as usize,
+                (tile_words[0] & 0xFF00) as u8,
                 tile_words[1] as usize,
                 tile_words[2] as usize,
             );
@@ -145,7 +155,7 @@ impl Renderer {
             self.draw_tile(
                 ram_slice,
                 (tile_word & 0x00FF) as usize,
-                (tile_word & 0xFF00) as usize,
+                (tile_word & 0xFF00) as u8,
                 (i * 8) % CANVAS_WIDTH,
                 (i / (CANVAS_WIDTH / 8)) * 8,
             );
