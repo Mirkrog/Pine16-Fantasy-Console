@@ -1,52 +1,56 @@
-use byteorder::{LittleEndian, WriteBytesExt};
-use colored::Colorize;
-use simple_stopwatch::Stopwatch;
-use std::{fs::File, io::Write};
-
 mod assembler;
 mod assemblererror;
 
-use assembler::Assembler;
+use std::{fs, path::PathBuf, process};
+
+use clap::Parser;
+use colored::Colorize;
+
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Source file that should be assembled
+    #[arg()]
+    source: PathBuf,
+
+    /// Output file to write to (if left out, the input filename is used for lookup)
+    #[arg(short, long)]
+    output: Option<PathBuf>,
+}
 
 fn main() {
-    let stopwatch = Stopwatch::start_new();
+    let args = Args::parse();
 
-    // 1. Catch the result of assemble() manually
-    let assembly = match Assembler::new(include_str!("test.pineasm")).assemble() {
-        Ok(data) => data,
-        Err(err) => {
-            eprintln!("{}: {err}", "error".red().bold());
-            std::process::exit(1);
-        }
-    };
-
-    let mut out_file = match File::create("test.o") {
-        Ok(file) => file,
-        Err(err) => {
-            eprintln!(
-                "{}: Failed to create output file: {:?}",
-                "error".red().bold(),
-                err
-            );
-            std::process::exit(1);
-        }
-    };
-
-    let mut buffer = [0u8; 20];
-    buffer[..17].copy_from_slice("PINE16ASSEMBLY :D".as_bytes());
-    buffer[17] = env!("CARGO_PKG_VERSION_MAJOR").parse::<u8>().unwrap();
-    buffer[18] = env!("CARGO_PKG_VERSION_MINOR").parse::<u8>().unwrap();
-    buffer[19] = env!("CARGO_PKG_VERSION_PATCH").parse::<u8>().unwrap();
-
-    out_file.write_all(&buffer).unwrap();
-
-    for bytepair in assembly {
-        out_file.write_u16::<LittleEndian>(bytepair).unwrap();
+    if let Some(extension) = args.source.extension()
+        && extension != "pineasm"
+    {
+        eprintln!(
+            "{} to open source file {:?} Wrong file extension, expected \".pineasm\"",
+            "Failed".red().bold(),
+            args.source.as_path(),
+        );
+        process::exit(1);
     }
 
-    println!(
-        "{} assembling in: {}s",
-        "Finished".green().bold(),
-        stopwatch.s()
-    );
+    let source_string = fs::read_to_string(&args.source).unwrap_or_else(|e| {
+        eprintln!(
+            "{} to open source file {:?} {}",
+            "Failed".red().bold(),
+            args.source.as_path(),
+            e
+        );
+        process::exit(1);
+    });
+
+    let output_path = match args.output {
+        Some(path) => path,
+        None => {
+            let mut path = PathBuf::new();
+            path.set_file_name(args.source.file_stem().expect("input file has no prefix"));
+            path.set_extension("pinecart");
+            path
+        }
+    };
+
+    assembler::run_assembler(source_string, output_path);
 }

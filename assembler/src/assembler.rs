@@ -1,6 +1,10 @@
-use std::collections::HashMap;
-
+use byteorder::{LittleEndian, WriteBytesExt};
+use colored::Colorize;
 use miette::{NamedSource, SourceSpan};
+use simple_stopwatch::Stopwatch;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::{fs::File, io::Write};
 
 use crate::assemblererror::AssemblerError;
 
@@ -474,4 +478,46 @@ impl<'a> Assembler<'a> {
                 }),
         ]
     }
+}
+
+pub fn run_assembler(source: String, output: PathBuf) {
+    let stopwatch = Stopwatch::start_new();
+
+    let assembly = match Assembler::new(&source).assemble() {
+        Ok(data) => data,
+        Err(err) => {
+            eprintln!("{}: {err}", "error".red().bold());
+            std::process::exit(1);
+        }
+    };
+
+    let mut out_file = match File::create(output) {
+        Ok(file) => file,
+        Err(err) => {
+            eprintln!(
+                "{}: Failed to create output file: {:?}",
+                "error".red().bold(),
+                err
+            );
+            std::process::exit(1);
+        }
+    };
+
+    let mut buffer = [0u8; 20];
+    buffer[..17].copy_from_slice("PINE16ASSEMBLY :D".as_bytes());
+    buffer[17] = env!("CARGO_PKG_VERSION_MAJOR").parse::<u8>().unwrap();
+    buffer[18] = env!("CARGO_PKG_VERSION_MINOR").parse::<u8>().unwrap();
+    buffer[19] = env!("CARGO_PKG_VERSION_PATCH").parse::<u8>().unwrap();
+
+    out_file.write_all(&buffer).unwrap();
+
+    for bytepair in assembly {
+        out_file.write_u16::<LittleEndian>(bytepair).unwrap();
+    }
+
+    println!(
+        "{} assembling in: {}s",
+        "Finished".green().bold(),
+        stopwatch.s()
+    );
 }
