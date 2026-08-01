@@ -278,7 +278,7 @@ pub fn run(
     }
     #[cfg(target_arch = "wasm32")]
     {
-        let app = App::new(&event_loop, false);
+        let app = App::new(&event_loop, console_guardrails);
         event_loop.spawn_app(app);
     }
 

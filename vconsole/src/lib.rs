@@ -13,7 +13,7 @@ pub fn run_web() -> Result<(), wasm_bindgen::JsValue> {
     use wasm_bindgen::UnwrapThrowExt;
 
     console_error_panic_hook::set_once();
-    app::run().unwrap_throw();
+    app::run(false).unwrap_throw();
 
     Ok(())
 }
