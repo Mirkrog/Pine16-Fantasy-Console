@@ -1,8 +1,5 @@
 use crate::renderer::Renderer;
-use std::{
-    mem::take,
-    ops::{BitAnd, BitOr, BitXor, Shl, Shr, Sub},
-};
+use std::ops::{BitAnd, BitOr, BitXor, Shl, Shr};
 use winit::{dpi::PhysicalSize, keyboard};
 
 #[repr(u8)]
@@ -48,8 +45,10 @@ impl OpCode {
             13 => Ok(OpCode::Xor),
             14 => Ok(OpCode::Shl),
             15 => Ok(OpCode::Shr),
-            16 => Ok(OpCode::Jsr),
-            17 => Ok(OpCode::Rtr),
+            16 => Ok(OpCode::Push),
+            17 => Ok(OpCode::Pop),
+            18 => Ok(OpCode::Jsr),
+            19 => Ok(OpCode::Rtr),
             other => Err(format!("Unknown OpCode: {other}")),
         }
     }

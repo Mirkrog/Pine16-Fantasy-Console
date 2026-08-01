@@ -3,11 +3,9 @@ use colored::Colorize;
 use miette::{NamedSource, SourceSpan};
 use simple_stopwatch::Stopwatch;
 use std::collections::HashMap;
-use std::mem::transmute;
 use std::path::PathBuf;
 use std::{fs::File, io::Write};
 
-use crate::assembler::OpCode::Jsr;
 use crate::assemblererror::AssemblerError;
 
 #[repr(u8)]
@@ -338,7 +336,7 @@ impl<'a> Assembler<'a> {
         }
     }
     /// Actually creating the output assembly
-    fn assemble_instruction(&mut self, mut instruction: &str) -> Option<[u16; 3]> {
+    fn assemble_instruction(&mut self, instruction: &str) -> Option<[u16; 3]> {
         let source_start_ptr = self.source.as_ptr() as usize;
 
         if instruction.contains(':') {
