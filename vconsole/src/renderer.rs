@@ -11,12 +11,14 @@ pub const CAVAS_HEIGHT: usize = 200;
 pub struct Renderer {
     pixel_buffer: Option<Pixels<'static>>,
     surface_visible: bool,
+    guardrails: bool,
 }
 impl Renderer {
-    pub fn new() -> Self {
+    pub fn new(guardrails: bool) -> Self {
         Self {
             pixel_buffer: None,
             surface_visible: true,
+            guardrails,
         }
     }
     pub fn resume(&mut self, mut pixel_buffer: Pixels<'static>) {
@@ -33,24 +35,24 @@ impl Renderer {
     }
     pub fn resize_surface(&mut self, width: u32, height: u32) {
         if width == 0 || height == 0 {
-            println!("Surface not visible, dissabling rendering");
+            log::info!("Surface not visible, dissabling rendering");
             self.surface_visible = false;
             return;
         } else if !self.surface_visible {
-            println!("Surface visible, enabling rendering");
+            log::info!("Surface visible, enabling rendering");
             self.surface_visible = true;
         }
         match self.pixel_buffer.as_mut() {
             Some(buffer) => buffer.resize_surface(width, height).unwrap(),
             None => {
-                println!("Tried to resize uninitialized buffer")
+                log::warn!("Tried to resize uninitialized buffer")
             }
         }
     }
     pub fn draw_tile(
         &mut self,
         ram_slice: &[u16; 65535],
-        id: usize,
+        mut id: usize,
         flags: u8,
         x: usize,
         y: usize,
@@ -58,7 +60,11 @@ impl Renderer {
         let x_flipped = (flags >> 1) & 1 == 1;
         let y_flipped = flags & 1 == 1;
         if id >= 256 {
-            panic!("Tile ID: {id} is out of bounds")
+            if self.guardrails {
+                panic!("Tile ID: {id} is out of bounds")
+            } else {
+                id = 0
+            }
         }
         if id == 0 {
             return;
@@ -168,7 +174,7 @@ impl Renderer {
         let pixel_buffer = match &mut self.pixel_buffer {
             Some(buffer) => buffer,
             None => {
-                println!("Tried to render without pixel_buffer!");
+                log::warn!("Tried to render without pixel_buffer!");
                 return;
             }
         };

@@ -14,6 +14,9 @@ struct Args {
     /// Path to the cartridge to run
     #[arg()]
     cart_path: PathBuf,
+    /// Enables guardrails which prevents undefined behavior
+    #[arg(short, long, default_value_t = false)]
+    guardrails: bool,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -29,7 +32,7 @@ fn main() -> anyhow::Result<()> {
         process::exit(1);
     }
 
-    app::run(args.cart_path)?;
+    app::run(args.cart_path, args.guardrails)?;
 
     Ok(())
 }

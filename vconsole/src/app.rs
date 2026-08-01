@@ -37,6 +37,7 @@ impl App {
     pub fn new(
         #[cfg(target_arch = "wasm32")] event_loop: &EventLoop<Pixels<'static>>,
         #[cfg(not(target_arch = "wasm32"))] cart_path: PathBuf,
+        console_guardrails: bool,
     ) -> Self {
         #[cfg(target_arch = "wasm32")]
         let proxy = Some(event_loop.create_proxy());
@@ -46,7 +47,7 @@ impl App {
             #[cfg(target_arch = "wasm32")]
             receiver: None,
             window: None,
-            console: Console::default(),
+            console: Console::new(console_guardrails),
             #[cfg(not(target_arch = "wasm32"))]
             cart_path,
             #[cfg(target_arch = "wasm32")]
@@ -254,7 +255,10 @@ async fn get_bytes_from_url(url: String) -> Option<Vec<u8>> {
     Some(response.binary().await.unwrap())
 }
 
-pub fn run(#[cfg(not(target_arch = "wasm32"))] cart_path: PathBuf) -> anyhow::Result<()> {
+pub fn run(
+    #[cfg(not(target_arch = "wasm32"))] cart_path: PathBuf,
+    console_guardrails: bool,
+) -> anyhow::Result<()> {
     let event_loop = EventLoop::with_user_event().build()?;
     event_loop.set_control_flow(ControlFlow::Poll);
 
@@ -268,12 +272,13 @@ pub fn run(#[cfg(not(target_arch = "wasm32"))] cart_path: PathBuf) -> anyhow::Re
         let mut app = App::new(
             #[cfg(not(target_arch = "wasm32"))]
             cart_path,
+            console_guardrails,
         );
         event_loop.run_app(&mut app)?;
     }
     #[cfg(target_arch = "wasm32")]
     {
-        let app = App::new(&event_loop);
+        let app = App::new(&event_loop, false);
         event_loop.spawn_app(app);
     }
 

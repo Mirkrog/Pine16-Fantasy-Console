@@ -132,12 +132,13 @@ pub struct Console {
     stall_timer: u16,
     registers: [u16; 5],
     last_pressed_key: Option<keyboard::Key>,
+    guardrails: bool,
 }
 
 impl Console {
-    pub fn new() -> Self {
+    pub fn new(guardrails: bool) -> Self {
         Self {
-            renderer: Renderer::new(),
+            renderer: Renderer::new(guardrails),
             rom: Vec::new(),
             sram: [0; u16::MAX as usize],
             currently_awaiting: None,
@@ -145,10 +146,8 @@ impl Console {
             stall_timer: 0,
             registers: [0; 5],
             last_pressed_key: None,
+            guardrails,
         }
-    }
-    pub fn default() -> Self {
-        Self::new()
     }
     pub fn is_rom_loaded(&self) -> bool {
         !self.rom.is_empty()
@@ -301,18 +300,32 @@ impl Console {
     }
     fn read_arg(&self, arg: &Argument) -> u16 {
         match arg.arg_type {
-            ArgumentType::Empty => panic!("Can't read from empty"),
+            ArgumentType::Empty => {
+                if self.guardrails {
+                    panic!("Can't read from empty")
+                } else {
+                    0
+                }
+            }
             ArgumentType::Immediate => arg.value,
             ArgumentType::Address => self.read_ram(arg.value),
             ArgumentType::Register => {
                 if (arg.value as usize) >= self.registers.len() {
-                    panic!("Register address out of bounds: {}", arg.value)
+                    if self.guardrails {
+                        panic!("Register address out of bounds: {}", arg.value)
+                    } else {
+                        return 0;
+                    }
                 }
                 self.registers[arg.value as usize]
             }
             ArgumentType::RegisterPointedAddress => {
                 if (arg.value as usize) >= self.registers.len() {
-                    panic!("Register address out of bounds: {}", arg.value)
+                    if self.guardrails {
+                        panic!("Register address out of bounds: {}", arg.value)
+                    } else {
+                        return 0;
+                    }
                 }
                 let register = self.registers[arg.value as usize];
                 self.read_ram(register)
@@ -321,20 +334,34 @@ impl Console {
     }
     fn write_arg(&mut self, arg: &Argument, value: u16) {
         match arg.arg_type {
-            ArgumentType::Empty => panic!("Can't write to empty"),
+            ArgumentType::Empty => {
+                if self.guardrails {
+                    panic!("Can't write to empty")
+                }
+            }
             ArgumentType::Immediate => {
-                panic!("Can't write to Immediate")
+                if self.guardrails {
+                    panic!("Can't write to Immediate")
+                }
             }
             ArgumentType::Address => self.write_ram(arg.value, value),
             ArgumentType::Register => {
                 if (arg.value as usize) >= self.registers.len() {
-                    panic!("Register address out of bounds: {}", arg.value)
+                    if self.guardrails {
+                        panic!("Register address out of bounds: {}", arg.value)
+                    } else {
+                        return;
+                    }
                 }
                 self.registers[arg.value as usize] = value
             }
             ArgumentType::RegisterPointedAddress => {
                 if (arg.value as usize) >= self.registers.len() {
-                    panic!("Register address out of bounds: {}", arg.value)
+                    if self.guardrails {
+                        panic!("Register address out of bounds: {}", arg.value)
+                    } else {
+                        return;
+                    }
                 }
                 let register = self.registers[arg.value as usize];
                 self.write_ram(register, value)
@@ -350,16 +377,24 @@ impl Console {
         if address >= 300 {
             self.sram[address as usize] = value;
         } else {
-            panic!("Tried to write to read-only ram, address: {address}")
+            if self.guardrails {
+                panic!("Tried to write to read-only ram, address: {address}")
+            }
         }
     }
     #[inline(always)]
     fn push_stack(&mut self, value: u16) {
+        if self.guardrails && self.registers[4] + 1 >= u16::MAX - 300 {
+            panic!("Stack Overflow into Read-Only memory")
+        }
         self.registers[4] += 1;
         self.write_ram(u16::MAX - self.registers[4], value);
     }
     #[inline(always)]
     fn pop_stack(&mut self) -> u16 {
+        if self.guardrails && self.registers[4] == 0 {
+            panic!("Stack Underflow into Read-Only memory")
+        }
         self.registers[4] -= 1;
         self.read_ram((u16::MAX - 1) - self.registers[4])
     }
