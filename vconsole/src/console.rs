@@ -1,5 +1,9 @@
 use crate::renderer::Renderer;
-use std::ops::{BitAnd, BitOr, BitXor, Shl, Shr};
+use std::{
+    io::Read,
+    ops::{BitAnd, BitOr, BitXor, Shl, Shr},
+    process,
+};
 use winit::{dpi::PhysicalSize, keyboard};
 
 #[repr(u8)]
@@ -27,29 +31,35 @@ enum OpCode {
     Rtr,
 }
 impl OpCode {
-    fn from_u8(bytecode: u8) -> Result<OpCode, String> {
+    fn from_u8(bytecode: u8, guardrails: bool) -> OpCode {
         match bytecode {
-            0 => Ok(OpCode::NoOp),
-            1 => Ok(OpCode::Add),
-            2 => Ok(OpCode::Sub),
-            3 => Ok(OpCode::Mul),
-            4 => Ok(OpCode::Div),
-            5 => Ok(OpCode::Stall),
-            6 => Ok(OpCode::Await),
-            7 => Ok(OpCode::Mov),
-            8 => Ok(OpCode::Jmp),
-            9 => Ok(OpCode::Jeq),
-            10 => Ok(OpCode::Jne),
-            11 => Ok(OpCode::And),
-            12 => Ok(OpCode::Or),
-            13 => Ok(OpCode::Xor),
-            14 => Ok(OpCode::Shl),
-            15 => Ok(OpCode::Shr),
-            16 => Ok(OpCode::Push),
-            17 => Ok(OpCode::Pop),
-            18 => Ok(OpCode::Jsr),
-            19 => Ok(OpCode::Rtr),
-            other => Err(format!("Unknown OpCode: {other}")),
+            0 => OpCode::NoOp,
+            1 => OpCode::Add,
+            2 => OpCode::Sub,
+            3 => OpCode::Mul,
+            4 => OpCode::Div,
+            5 => OpCode::Stall,
+            6 => OpCode::Await,
+            7 => OpCode::Mov,
+            8 => OpCode::Jmp,
+            9 => OpCode::Jeq,
+            10 => OpCode::Jne,
+            11 => OpCode::And,
+            12 => OpCode::Or,
+            13 => OpCode::Xor,
+            14 => OpCode::Shl,
+            15 => OpCode::Shr,
+            16 => OpCode::Push,
+            17 => OpCode::Pop,
+            18 => OpCode::Jsr,
+            19 => OpCode::Rtr,
+            other => {
+                if guardrails {
+                    panic!("Unknown OpCode: {other}")
+                } else {
+                    OpCode::NoOp
+                }
+            }
         }
     }
 }
@@ -64,14 +74,20 @@ pub enum ArgumentType {
     Register,               // Points to one of the registers
 }
 impl ArgumentType {
-    fn from_u8(bytecode: u8) -> Result<ArgumentType, String> {
+    fn from_u8(bytecode: u8, guardrails: bool) -> ArgumentType {
         match bytecode {
-            0 => Ok(ArgumentType::Empty),
-            1 => Ok(ArgumentType::Immediate),
-            2 => Ok(ArgumentType::Address),
-            3 => Ok(ArgumentType::Register),
-            4 => Ok(ArgumentType::RegisterPointedAddress),
-            other => Err(format!("Unknown ArgumentType: {} (0 - 5)", other)),
+            0 => ArgumentType::Empty,
+            1 => ArgumentType::Immediate,
+            2 => ArgumentType::Address,
+            3 => ArgumentType::Register,
+            4 => ArgumentType::RegisterPointedAddress,
+            other => {
+                if guardrails {
+                    panic!("Unknown ArgumentType: {} (0 - 5)", other)
+                } else {
+                    ArgumentType::Empty
+                }
+            }
         }
     }
 }
@@ -95,16 +111,16 @@ pub struct Instruction {
 }
 
 impl Instruction {
-    fn from_u16(source: &[u16; 3]) -> Result<Instruction, String> {
-        // they are all bytes but arg0 and arg1 are only u4
+    fn from_u16(source: &[u16; 3], guardrails: bool) -> Instruction {
+        // they are all bytes but arg0 and arg1 are only half a byte
         let (opcode_byte, args_byte) = ((source[0] >> 8) as u8, (source[0] & 0xff) as u8);
         let (arg1_type_byte, arg2_type_byte) = ((args_byte >> 4), args_byte & 0b00001111);
 
-        Ok(Self {
-            opcode: OpCode::from_u8(opcode_byte)?,
-            arg1: Argument::new(ArgumentType::from_u8(arg1_type_byte)?, source[1]),
-            arg2: Argument::new(ArgumentType::from_u8(arg2_type_byte)?, source[2]),
-        })
+        Self {
+            opcode: OpCode::from_u8(opcode_byte, guardrails),
+            arg1: Argument::new(ArgumentType::from_u8(arg1_type_byte, guardrails), source[1]),
+            arg2: Argument::new(ArgumentType::from_u8(arg2_type_byte, guardrails), source[2]),
+        }
     }
 }
 
@@ -408,16 +424,25 @@ impl Console {
                     panic!(
                         "Program Pointer went out of bounds; ROM len: {}, Program Pointer: {}",
                         self.rom.len(),
-                        self.program_counter,
+                        self.program_counter * 3,
                     );
                 })
                 .try_into()
                 .unwrap(),
+            self.guardrails,
         )
-        .unwrap()
     }
     pub fn load_rom_from_bytes(&mut self, bytes: Vec<u8>) -> anyhow::Result<()> {
         compare_version(&bytes[17..20]);
+
+        if bytes.get(..17).unwrap_or("".as_bytes()) != "PINE16ASSEMBLY :D".as_bytes() {
+            log::error!(
+                "ROM header corrupt, expected: {:?}, found: {:?}",
+                "PINE16ASSEMBLY :D".as_bytes(),
+                bytes.get(..17).unwrap_or("".as_bytes())
+            );
+            std::process::exit(1)
+        }
 
         self.rom = bytes
             .get(20..) // skip header (magic + version)
@@ -465,16 +490,17 @@ fn compare_version(version_bytes: &[u8]) {
     let patch_version = env!("CARGO_PKG_VERSION_PATCH").parse::<u8>().unwrap();
 
     if major_version != version_bytes[0] || minor_version != version_bytes[1] {
-        panic!(
+        log::error!(
             "Rom is not compatible (console_ver: {}, bin_ver: {}.{}.{})",
             env!("CARGO_PKG_VERSION"),
             version_bytes[0],
             version_bytes[1],
             version_bytes[2]
-        )
+        );
+        process::exit(11);
     }
     if patch_version != version_bytes[2] {
-        println!(
+        log::warn!(
             "Rom is only partially compatible (console_ver: {}, bin_ver: {:?})",
             env!("CARGO_PKG_VERSION"),
             version_bytes

@@ -32,6 +32,10 @@ fn main() -> anyhow::Result<()> {
         process::exit(1);
     }
 
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Info)
+        .init();
+
     app::run(args.cart_path, args.guardrails)?;
 
     Ok(())
