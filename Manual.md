@@ -83,7 +83,7 @@ Attempting to write to a read-only argument type (like Immediate) or an empty ar
 The PINE16 renderer outputs a fixed `320x200` pixel canvas operating at 30 frames per second. 
 
 ### Tilesheet Memory (`1000` - `3559`)
-Tiles are 8x8 pixels. Each tile requires 16 words of memory (256 tiles total). 
+Tiles are 8x8 pixels. Each tile requires 16 words of memory (256 tiles total). It is recommended to define Sprites in hex, because every pixel is one digit
 * Each 16-bit word stores half a row of pixels (4 pixels per word, 4 bits per pixel).
 * The 4-bit value acts as an index pointing to the system color palette.
 * Tile ID `0` is ignored by the renderer and effectively transparent.

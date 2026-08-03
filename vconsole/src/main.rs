@@ -33,7 +33,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     env_logger::builder()
-        .filter_level(log::LevelFilter::Info)
+        .filter_module("crate::app", log::LevelFilter::Info)
         .init();
 
     app::run(args.cart_path, args.guardrails)?;

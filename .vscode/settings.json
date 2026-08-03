@@ -2,5 +2,4 @@
   "rust-analyzer.procMacro.enable": true,
   "rust-analyzer.cargo.buildScripts.enable": true,
   //"rust-analyzer.cargo.target": "wasm32-unknown-unknown",
-  "livePreview.defaultPreviewPath": "/vconsole/pkg/test.html"
 }
