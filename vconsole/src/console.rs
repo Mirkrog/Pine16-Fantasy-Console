@@ -202,7 +202,7 @@ impl Console {
         const MHZ: f32 = 2.0;
 
         // setting the vblank flag
-        self.sram[MemoryPois::VblankFlag as usize] = 0x0001;
+        self.sram[MemoryPois::VblankFlag as usize] = 0x0000;
 
         let mut step_counter: u32 = 0;
         while step_counter < ((MHZ * 1_000_000.0) / STEP_RATE) as u32 {
@@ -306,7 +306,7 @@ impl Console {
 
             if step_counter == 0 {
                 // setting the vblank flag back to 0
-                self.sram[MemoryPois::VblankFlag as usize] = 0x0000;
+                self.sram[MemoryPois::VblankFlag as usize] = 0x0001;
             }
 
             step_counter += 1;
