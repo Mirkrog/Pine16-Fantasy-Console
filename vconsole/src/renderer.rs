@@ -76,7 +76,7 @@ impl Renderer {
             .expect("Tried to draw to uninitialized Pixels canvas")
             .frame_mut();
         for (pixel_y, row) in ram_slice
-            [TILESHEET_OFFSET + ((id + 1) * 16)..TILESHEET_OFFSET + ((id + 1) * 16) + 16]
+            [TILESHEET_OFFSET + ((id - 1) * 16)..TILESHEET_OFFSET + ((id - 1) * 16) + 16]
             .chunks_exact(2)
             .enumerate()
         {
