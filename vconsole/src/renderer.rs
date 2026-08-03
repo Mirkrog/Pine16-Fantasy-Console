@@ -2,7 +2,7 @@ use pixels::{Pixels, wgpu::Color};
 
 const PALETTE_OFFSET: usize = 300;
 const TILESHEET_OFFSET: usize = 1000;
-const TILEMAP_OFFSET: usize = TILESHEET_OFFSET + 2560;
+const TILEMAP_OFFSET: usize = TILESHEET_OFFSET + 2544;
 
 // these are just for convenience and mustn't be changed
 pub const CANVAS_WIDTH: usize = 320;
@@ -59,7 +59,7 @@ impl Renderer {
     ) {
         let x_flipped = (flags >> 1) & 1 == 1;
         let y_flipped = flags & 1 == 1;
-        if id >= 256 {
+        if id >= 255 {
             if self.guardrails {
                 panic!("Tile ID: {id} is out of bounds")
             } else {
@@ -69,13 +69,14 @@ impl Renderer {
         if id == 0 {
             return;
         }
+
         let frame = self
             .pixel_buffer
             .as_mut()
             .expect("Tried to draw to uninitialized Pixels canvas")
             .frame_mut();
         for (pixel_y, row) in ram_slice
-            [TILESHEET_OFFSET + (id * 16)..TILESHEET_OFFSET + (id * 16) + 16]
+            [TILESHEET_OFFSET + ((id + 1) * 16)..TILESHEET_OFFSET + ((id + 1) * 16) + 16]
             .chunks_exact(2)
             .enumerate()
         {
@@ -115,7 +116,7 @@ impl Renderer {
     pub fn draw(&mut self, ram_slice: &[u16; 65535]) {
         let background_map = &ram_slice[TILEMAP_OFFSET..TILEMAP_OFFSET + 1000];
         let sprite_layer = &ram_slice[TILEMAP_OFFSET + 1000..TILEMAP_OFFSET + 1999];
-        let foreground_layer = &ram_slice[TILEMAP_OFFSET + 2000..TILEMAP_OFFSET + 3000];
+        let foreground_layer = &ram_slice[TILEMAP_OFFSET + 1999..TILEMAP_OFFSET + 2999];
 
         //drawing the clear color
         let clear_color = ram_slice[300];
