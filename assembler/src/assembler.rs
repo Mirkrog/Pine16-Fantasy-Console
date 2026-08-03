@@ -378,7 +378,7 @@ impl<'a> Assembler<'a> {
         }
         let mut tokens = instruction
             .split_whitespace()
-            .map(|token| token.split(',').next().unwrap());
+            .flat_map(|token| token.split(','));
 
         let opcode_token = tokens.next().unwrap();
         let opcode = if !opcode_obstructed {
