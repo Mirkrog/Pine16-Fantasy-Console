@@ -63,7 +63,10 @@ pub enum AssemblerError {
         span: SourceSpan,
     },
     #[error("Too Many Arguments")]
-    #[diagnostic(code(assembler::too_many_arguments))]
+    #[diagnostic(
+        code(assembler::too_many_arguments),
+        help("the maximum amount of arguments for any opcode is 2")
+    )]
     TooManyArguments {
         #[label("too many arguments were given")]
         span: SourceSpan,
@@ -96,6 +99,36 @@ pub enum AssemblerError {
     )]
     MisplacedComma {
         #[label("this comma is misplaced")]
+        span: SourceSpan,
+    },
+    #[error("Useless Data Definition")]
+    #[diagnostic(
+        code(assembler::useless_data_definition),
+        help("The consoles memory is cleared when a ROM is loaded")
+    )]
+    UselessDataDefinition {
+        #[label("this data definition is useless")]
+        span: SourceSpan,
+    },
+    #[error("Wrong Amount Of Arguments")]
+    #[diagnostic(
+        code(assembler::wrong_argument_amount),
+        help("The consoles memory is cleared when a ROM is loaded")
+    )]
+    WrongArgumentAmount {
+        expected_amount: usize,
+        amount: usize,
+        #[label("expected {expected_amount} of argument(s), got {amount}")]
+        span: SourceSpan,
+    },
+    #[error("Palette Index Out Of Bounds")]
+    #[diagnostic(
+        code(assembler::palette_index_out_of_bounds),
+        help("The palette used by the console is only 4 bit")
+    )]
+    PaletteIndexOutOfBounds {
+        number: u16,
+        #[label("number out of range (0 - 15): {number}")]
         span: SourceSpan,
     },
 }

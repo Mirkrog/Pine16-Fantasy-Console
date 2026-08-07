@@ -1,7 +1,11 @@
 mod assembler;
 mod assemblererror;
 
-use std::{fs, path::PathBuf, process};
+use std::{
+    fs,
+    path::PathBuf,
+    process::{self, ExitCode},
+};
 
 use clap::Parser;
 use colored::Colorize;
@@ -21,9 +25,7 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    if let Some(extension) = args.source.extension()
-        && extension != "pineasm"
-    {
+    if args.source.extension().and_then(|s| s.to_str()) != Some("pineasm") {
         eprintln!(
             "{} to open source file {:?} Wrong file extension, expected \".pineasm\"",
             "Failed".red().bold(),
@@ -52,5 +54,9 @@ fn main() {
         }
     };
 
-    assembler::run_assembler(source_string, output_path);
+    assembler::run_assembler(
+        source_string,
+        args.source.file_name().unwrap().to_owned(),
+        output_path,
+    );
 }

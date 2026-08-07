@@ -2,8 +2,10 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use colored::Colorize;
 use miette::{NamedSource, SourceSpan};
 use simple_stopwatch::Stopwatch;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::ffi::OsString;
 use std::path::PathBuf;
+use std::vec;
 use std::{fs::File, io::Write};
 
 use crate::assemblererror::AssemblerError;
@@ -236,14 +238,18 @@ impl Argument {
 
 pub struct Assembler<'a> {
     source: &'a str,
+    source_name: &'a std::ffi::OsString,
     labels: HashMap<String, u16>,
+    data: BTreeMap<u16, u16>,
     errors: Vec<AssemblerError>,
 }
 impl<'a> Assembler<'a> {
-    pub fn new(source: &'a str) -> Self {
+    pub fn new(source: &'a str, source_name: &'a std::ffi::OsString) -> Self {
         Self {
             source,
+            source_name,
             labels: HashMap::new(),
+            data: BTreeMap::new(),
             errors: Vec::new(),
         }
     }
@@ -279,7 +285,8 @@ impl<'a> Assembler<'a> {
             }
 
             return Err(format!(
-                "Could not assemble _ due to {error_count} error(s)"
+                "Could not assemble {} due to {error_count} error(s)",
+                self.source_name.to_str().unwrap_or("[FILENAME_MALFORMED]")
             ));
         }
 
@@ -290,6 +297,7 @@ impl<'a> Assembler<'a> {
         let mut label_strs: Vec<&str> = Vec::new();
         let source_start_ptr = self.source.as_ptr() as usize;
         let mut instruction_index = 0;
+        let mut data_index = 0;
 
         for instruction in self.source.lines() {
             let instruction = match instruction.split(';').next() {
@@ -328,6 +336,146 @@ impl<'a> Assembler<'a> {
                                 instruction.len(),
                             ),
                         });
+                    }
+                }
+            } else if instruction.starts_with('.') {
+                let mut tokens = instruction
+                    .split_whitespace()
+                    .flat_map(|token| token.split(','))
+                    .filter(|token| !token.is_empty())
+                    .peekable();
+                let type_token = tokens.next().unwrap_or_default();
+                if tokens.peek() == Some(&"at") {
+                    tokens.next();
+                    let token = tokens.next().unwrap_or_default();
+                    data_index = parse_int::parse::<u16>(token).unwrap_or_else(|e| -> u16 {
+                        self.errors.push(AssemblerError::FailedToParseNumber {
+                            number: token.to_string(),
+                            parseerror: e,
+                            span: SourceSpan::new(
+                                (token.as_ptr() as usize - source_start_ptr).into(),
+                                token.len(),
+                            ),
+                        });
+                        0
+                    });
+                }
+                let data_repeats = if tokens.peek() == Some(&"repeat") {
+                    tokens.next();
+                    let token = tokens.next().unwrap_or_default();
+                    parse_int::parse::<u16>(token).unwrap_or_else(|e| -> u16 {
+                        self.errors.push(AssemblerError::FailedToParseNumber {
+                            number: token.to_string(),
+                            parseerror: e,
+                            span: SourceSpan::new(
+                                (token.as_ptr() as usize - source_start_ptr).into(),
+                                token.len(),
+                            ),
+                        });
+                        0
+                    })
+                } else {
+                    0
+                };
+
+                let data = match type_token {
+                    ".data" => {
+                        let token = tokens.next().unwrap_or_else(|| {
+                            self.errors.push(AssemblerError::WrongArgumentAmount {
+                                expected_amount: 1,
+                                amount: 0,
+                                span: SourceSpan::new(
+                                    ((type_token.as_ptr() as usize + type_token.len())
+                                        - source_start_ptr)
+                                        .into(),
+                                    1,
+                                ),
+                            });
+                            "1"
+                        });
+                        let value = parse_int::parse::<u16>(token).unwrap_or_else(|e| -> u16 {
+                            self.errors.push(AssemblerError::FailedToParseNumber {
+                                number: token.to_string(),
+                                parseerror: e,
+                                span: SourceSpan::new(
+                                    (token.as_ptr() as usize - source_start_ptr).into(),
+                                    token.len(),
+                                ),
+                            });
+                            1
+                        });
+                        if value == 0 {
+                            self.errors.push(AssemblerError::UselessDataDefinition {
+                                span: SourceSpan::new(
+                                    (token.as_ptr() as usize - source_start_ptr).into(),
+                                    token.len(),
+                                ),
+                            });
+                        }
+                        vec![value]
+                    }
+                    ".sprrow" => {
+                        let amount = tokens.clone().count();
+                        if amount != 8 {
+                            let first_token = tokens.next();
+                            self.errors.push(AssemblerError::WrongArgumentAmount {
+                                expected_amount: 8,
+                                amount,
+                                span: SourceSpan::new(
+                                    first_token
+                                        .map_or_else(
+                                            || {
+                                                type_token.as_ptr() as usize + type_token.len() + 1
+                                                    - source_start_ptr
+                                            },
+                                            |token| (token.as_ptr() as usize) - source_start_ptr,
+                                        )
+                                        .into(),
+                                    tokens.next_back().map_or_else(
+                                        || type_token.as_ptr() as usize + type_token.len() + 1,
+                                        |token| {
+                                            (token.as_ptr() as usize + token.len())
+                                                - (first_token.unwrap().as_ptr() as usize)
+                                        },
+                                    ),
+                                ),
+                            });
+                        }
+                        let mut output = vec![0u16; 2];
+                        for (i, token) in tokens.enumerate() {
+                            let value = parse_int::parse::<u16>(token).unwrap_or_else(|e| -> u16 {
+                                self.errors.push(AssemblerError::FailedToParseNumber {
+                                    number: token.to_string(),
+                                    parseerror: e,
+                                    span: SourceSpan::new(
+                                        (token.as_ptr() as usize - source_start_ptr).into(),
+                                        token.len(),
+                                    ),
+                                });
+                                1
+                            });
+                            if value > 15 {
+                                self.errors.push(AssemblerError::PaletteIndexOutOfBounds {
+                                    number: value,
+                                    span: SourceSpan::new(
+                                        (token.as_ptr() as usize - source_start_ptr).into(),
+                                        token.len(),
+                                    ),
+                                });
+                            }
+                            output[i / 4] = value << ((3 - (i % 4)) * 4);
+                        }
+                        output
+                    }
+                    other => {
+                        println!("{}", other);
+                        todo!()
+                    }
+                };
+                for i in 0..data_repeats {
+                    for value in data.iter() {
+                        self.data.insert(data_index, *value);
+                        data_index += 1;
                     }
                 }
             } else {
@@ -376,9 +524,15 @@ impl<'a> Assembler<'a> {
                 ),
             });
         }
+
+        if instruction.contains('.') {
+            return None; // We early return when it is a definition
+        }
+
         let mut tokens = instruction
             .split_whitespace()
-            .flat_map(|token| token.split(','));
+            .flat_map(|token| token.split(','))
+            .filter(|token| !token.is_empty());
 
         let opcode_token = tokens.next().unwrap();
         let opcode = if !opcode_obstructed {
@@ -394,7 +548,7 @@ impl<'a> Assembler<'a> {
             OpCode::NoOp
         };
 
-        if instruction.split_whitespace().collect::<Vec<&str>>().len() > 3 {
+        if tokens.clone().count() > 3 {
             self.errors.push(AssemblerError::TooManyArguments {
                 span: SourceSpan::new((opcode_token.as_ptr() as usize).into(), instruction.len()),
             });
@@ -527,10 +681,10 @@ impl<'a> Assembler<'a> {
     }
 }
 
-pub fn run_assembler(source: String, output: PathBuf) {
+pub fn run_assembler(source: String, source_name: OsString, output: PathBuf) {
     let stopwatch = Stopwatch::start_new();
 
-    let assembly = match Assembler::new(&source).assemble() {
+    let assembly = match Assembler::new(&source, &source_name).assemble() {
         Ok(data) => data,
         Err(err) => {
             eprintln!("{}: {err}", "error".red().bold());
