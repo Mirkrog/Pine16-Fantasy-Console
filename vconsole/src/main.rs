@@ -1,26 +1,25 @@
-use anyhow::Ok;
+use clap::Parser;
+use std::{path::PathBuf, process};
 
 mod app;
 mod console;
 mod renderer;
 
-use std::{path::PathBuf, process};
-
-use clap::Parser;
-
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
     /// Path to the cartridge to run
-    #[arg()]
     cart_path: PathBuf,
-    /// Enables guardrails which prevents undefined behavior
+    /// Enables guardrails which prevent undefined behavior
     #[arg(short, long, default_value_t = false)]
     guardrails: bool,
+    /// Sets the log-level for the console, possible values: Off, Error, Warn, Info, Debug, Trace
+    #[arg(short, long = "log-level", default_value_t = log::LevelFilter::Info)]
+    log_level: log::LevelFilter,
 }
 
 fn main() -> anyhow::Result<()> {
-    let args = Args::parse();
+    let args: Args = Args::parse();
 
     if let Some(extension) = args.cart_path.extension()
         && extension != "pinecart"
@@ -32,9 +31,7 @@ fn main() -> anyhow::Result<()> {
         process::exit(1);
     }
 
-    env_logger::builder()
-        .filter_module("crate::app", log::LevelFilter::Info)
-        .init();
+    env_logger::builder().filter_level(args.log_level).init();
 
     app::run(args.cart_path, args.guardrails)?;
 

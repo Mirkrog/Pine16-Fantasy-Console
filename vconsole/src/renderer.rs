@@ -35,11 +35,11 @@ impl Renderer {
     }
     pub fn resize_surface(&mut self, width: u32, height: u32) {
         if width == 0 || height == 0 {
-            log::debug!("Surface not visible, dissabling rendering");
+            log::debug!("Surface not visible, skipping rendering");
             self.surface_visible = false;
             return;
         } else if !self.surface_visible {
-            log::debug!("Surface visible, enabling rendering");
+            log::debug!("Surface visible, skipping rendering");
             self.surface_visible = true;
         }
         match self.pixel_buffer.as_mut() {

@@ -1,8 +1,10 @@
 use crate::renderer::Renderer;
-use std::{
-    ops::{BitAnd, BitOr, BitXor, Shl, Shr},
-    process,
-};
+use std::ops::{BitAnd, BitOr, BitXor, Shl, Shr};
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
+#[cfg(target_arch = "wasm32")]
+use web_time::Instant;
+
 use winit::{dpi::PhysicalSize, keyboard};
 
 #[repr(u8)]
@@ -180,11 +182,9 @@ impl Console {
     pub fn key_pressed(&mut self, key: keyboard::Key) {
         if let Some(text) = key.to_text()
             && text.is_ascii()
+            && !text.is_empty()
         {
-            let ascii = text
-                .bytes()
-                .next()
-                .expect("Key cannot be converted to bytes");
+            let ascii = text.bytes().next().unwrap();
 
             self.sram[MemoryPois::CurrentPressedKeyASCII as usize] = ascii as u16;
 
@@ -432,6 +432,8 @@ impl Console {
         )
     }
     pub fn load_rom_from_bytes(&mut self, bytes: Vec<u8>) -> anyhow::Result<()> {
+        let now = Instant::now();
+
         compare_version(&bytes[17..20]);
 
         if bytes.get(..17).unwrap_or("".as_bytes()) != "PINE16ASSEMBLY :D".as_bytes() {
@@ -450,32 +452,39 @@ impl Console {
             .map(|v| u16::from_le_bytes([v[0], v[1]]))
             .collect();
         // initializing read only flags
-        self.sram[MemoryPois::MajorConsoleVersion as usize] =
-            env!("CARGO_PKG_VERSION_MAJOR").parse::<u16>().unwrap();
-        self.sram[MemoryPois::MinorConsoleVersion as usize] =
-            env!("CARGO_PKG_VERSION_MINOR").parse::<u16>().unwrap();
-        self.sram[MemoryPois::PatchConsoleVersion as usize] =
-            env!("CARGO_PKG_VERSION_PATCH").parse::<u16>().unwrap();
-        self.sram[MemoryPois::MajorROMVersion as usize] = bytes[17] as u16;
-        self.sram[MemoryPois::MinorROMVersion as usize] = bytes[18] as u16;
-        self.sram[MemoryPois::PatchROMVersion as usize] = bytes[19] as u16;
-
+        {
+            self.sram[MemoryPois::MajorConsoleVersion as usize] =
+                env!("CARGO_PKG_VERSION_MAJOR").parse::<u16>().unwrap();
+            self.sram[MemoryPois::MinorConsoleVersion as usize] =
+                env!("CARGO_PKG_VERSION_MINOR").parse::<u16>().unwrap();
+            self.sram[MemoryPois::PatchConsoleVersion as usize] =
+                env!("CARGO_PKG_VERSION_PATCH").parse::<u16>().unwrap();
+            self.sram[MemoryPois::MajorROMVersion as usize] = bytes[17] as u16;
+            self.sram[MemoryPois::MinorROMVersion as usize] = bytes[18] as u16;
+            self.sram[MemoryPois::PatchROMVersion as usize] = bytes[19] as u16;
+        }
         // initializing palette
-        self.sram[301] = 0x18E5; // Index 1:  Deep Night
-        self.sram[302] = 0xF7BF; // Index 2:  Cloud White
-        self.sram[303] = 0x424A; // Index 3:  Charcoal
-        self.sram[304] = 0xA535; // Index 4:  Silver
-        self.sram[305] = 0xFA50; // Index 5:  Cyber Pink
-        self.sram[306] = 0x347F; // Index 6:  Ocean Blue
-        self.sram[307] = 0x3EBE; // Index 7:  Sky Cyan
-        self.sram[308] = 0x8787; // Index 8:  Slime Green
-        self.sram[309] = 0xBAFD; // Index 9:  Magic Violet
-        self.sram[310] = 0x6ADE; // Index 10: Electric Indigo
-        self.sram[311] = 0xECAF; // Index 11: Toasted Peach
-        self.sram[312] = 0xFB4B; // Index 12: Neon Coral
-        self.sram[313] = 0xFDC6; // Index 13: Sunny Amber
-        self.sram[314] = 0xF747; // Index 14: Electric Lemon
-        self.sram[315] = 0x2EF1; // Index 15: Minty Green
+        {
+            self.sram[301] = 0x18E5; // Index 1:  Deep Night
+            self.sram[302] = 0xF7BF; // Index 2:  Cloud White
+            self.sram[303] = 0x424A; // Index 3:  Charcoal
+            self.sram[304] = 0xA535; // Index 4:  Silver
+            self.sram[305] = 0xFA50; // Index 5:  Cyber Pink
+            self.sram[306] = 0x347F; // Index 6:  Ocean Blue
+            self.sram[307] = 0x3EBE; // Index 7:  Sky Cyan
+            self.sram[308] = 0x8787; // Index 8:  Slime Green
+            self.sram[309] = 0xBAFD; // Index 9:  Magic Violet
+            self.sram[310] = 0x6ADE; // Index 10: Electric Indigo
+            self.sram[311] = 0xECAF; // Index 11: Toasted Peach
+            self.sram[312] = 0xFB4B; // Index 12: Neon Coral
+            self.sram[313] = 0xFDC6; // Index 13: Sunny Amber
+            self.sram[314] = 0xF747; // Index 14: Electric Lemon
+            self.sram[315] = 0x2EF1; // Index 15: Minty Green
+        }
+        log::info!(
+            "Took {}s to load ROM",
+            (now.elapsed().as_nanos() as f32) / 1_000_000_f32
+        );
 
         Ok(())
     }
@@ -496,13 +505,21 @@ fn compare_version(version_bytes: &[u8]) {
             version_bytes[1],
             version_bytes[2]
         );
-        process::exit(11);
-    }
-    if patch_version != version_bytes[2] {
+    } else if patch_version != version_bytes[2] {
         log::warn!(
-            "Rom is only partially compatible (console_ver: {}, bin_ver: {:?})",
+            "Rom is only partially compatible (console_ver: {}, bin_ver: {}.{}.{})",
             env!("CARGO_PKG_VERSION"),
-            version_bytes
+            version_bytes[0],
+            version_bytes[1],
+            version_bytes[2]
+        )
+    } else {
+        log::info!(
+            "Rom is fully compatible (console_ver: {}, bin_ver: {}.{}.{}",
+            env!("CARGO_PKG_VERSION"),
+            version_bytes[0],
+            version_bytes[1],
+            version_bytes[2]
         )
     }
 }

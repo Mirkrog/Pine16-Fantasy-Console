@@ -24,10 +24,10 @@ Addresses `0x0000` through `0x012B` (0-299) are designated as Read-Only. Writing
 | `9` | Current Pressed Key (ASCII value) | Read-Only |
 | `300` | Clear Color (RGB565 format) | Read-Write |
 | `301` - `315` | Color Palette Index 1-15 (RGB565 format) | Read-Write |
-| `1000` - `3559` | Tilesheet Memory (2560 words; 256 tiles) | Read-Write |
-| `3560` - `4559` | Background Map Layer (1000 words; 40x25 grid) | Read-Write |
-| `4560` - `5559` | Sprite Layer (999 words; 333 sprite objects) | Read-Write |
-| `5560` - `6559` | Foreground Map Layer (1000 words; 40x25 grid) | Read-Write |
+| `1000` - `3543` | Tilesheet Memory (2544 words) | Read-Write |
+| `3544` - `4543` | Background Map Layer (1000 words; 40x25 grid) | Read-Write |
+| `4544` - `5542` | Sprite Layer (999 words; 333 sprite objects) | Read-Write |
+| `5543` - `6542` | Foreground Map Layer (1000 words; 40x25 grid) | Read-Write |
 | `u16::MAX` down | Stack Memory (Grows downward) | Read-Write |
 
 ---
@@ -82,26 +82,53 @@ Attempting to write to a read-only argument type (like Immediate) or an empty ar
 
 The PINE16 renderer outputs a fixed `320x200` pixel canvas operating at 30 frames per second. 
 
-### Tilesheet Memory (`1000` - `3559`)
-Tiles are 8x8 pixels. Each tile requires 16 words of memory (256 tiles total). It is recommended to define Sprites in hex, because every pixel is one digit
+### Tilesheet Memory (`1000` - `3543`)
+Tiles are 8x8 pixels. Each tile requires 16 words of memory. It is recommended to define Sprites in hex, because every pixel is one digit.
 * Each 16-bit word stores half a row of pixels (4 pixels per word, 4 bits per pixel).
 * The 4-bit value acts as an index pointing to the system color palette.
 * Tile ID `0` is ignored by the renderer and effectively transparent.
+* The renderer offsets Tile IDs by `-1` during calculation, mapping Tile ID `1` to address `1000`.
 
-### Modifying the Palette
-The system supports a 16-color palette (Index 0 is transparency). Memory address `300` defines the screen clear color. Addresses `301` through `315` define the standard palette indices 1-15. Colors must be written in RGB565 format.
-
-### Background and Foreground Layers (`3560` and `5560`)
+### Background and Foreground Layers (`3544` and `5543`)
 Both maps consist of a 40x25 tile grid (1000 words). The layout is row-major (left-to-right, top-to-bottom). 
 Each word defines a tile's properties:
-* **Lower Byte (Bits 0-7):** Tile ID (0-255).
+* **Lower Byte (Bits 0-7):** Tile ID (0-254).
 * **Upper Byte (Bits 8-15):** Flags.
   * Bit 8 (Flag `1`): Flip Y axis.
   * Bit 9 (Flag `2`): Flip X axis.
 
-### Sprite Layer (`4560` - `5559`)
+### Sprite Layer (`4544` - `5542`)
 The sprite layer manages up to 333 independent sprites. Each sprite is defined by a 3-word chunk:
 1. `[id_flags]`: Same format as Map layers (Lower Byte = ID, Upper Byte = Flags).
 2. `[x_position]`: Absolute X coordinate on the canvas.
-3. `[y_position]`: Absolute Y coordinate on the canvas. <br>
+3. `[y_position]`: Absolute Y coordinate on the canvas. 
+
 Sprites positioned beyond the canvas boundaries (X > 320, Y > 200) are culled.
+
+---
+
+## 5. System Palette
+
+The system supports a 16-color palette. Index 0 is always reserved for transparency when drawing tiles. Memory address `300` defines the screen clear color. Addresses `301` through `315` define the standard palette indices 1-15. 
+
+Colors are loaded into SRAM at boot using the RGB565 format. You can overwrite these addresses at runtime to change the palette dynamically.
+
+### Default Palette Layout
+
+| Index | SRAM Address | Color Name | RGB565 Value |
+| :--- | :--- | :--- | :--- |
+| 1 | `301` | Deep Night | `0x18E5` |
+| 2 | `302` | Cloud White | `0xF7BF` |
+| 3 | `303` | Charcoal | `0x424A` |
+| 4 | `304` | Silver | `0xA535` |
+| 5 | `305` | Cyber Pink | `0xFA50` |
+| 6 | `306` | Ocean Blue | `0x347F` |
+| 7 | `307` | Sky Cyan | `0x3EBE` |
+| 8 | `308` | Slime Green | `0x8787` |
+| 9 | `309` | Magic Violet | `0xBAFD` |
+| 10 | `310` | Electric Indigo | `0x6ADE` |
+| 11 | `311` | Toasted Peach | `0xECAF` |
+| 12 | `312` | Neon Coral | `0xFB4B` |
+| 13 | `313` | Sunny Amber | `0xFDC6` |
+| 14 | `314` | Electric Lemon | `0xF747` |
+| 15 | `315` | Minty Green | `0x2EF1` |
