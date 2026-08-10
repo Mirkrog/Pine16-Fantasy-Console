@@ -4,6 +4,7 @@ use miette::{NamedSource, SourceSpan};
 use simple_stopwatch::Stopwatch;
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
+use std::mem::{take, transmute};
 use std::path::PathBuf;
 use std::vec;
 use std::{fs::File, io::Write};
@@ -345,41 +346,79 @@ impl<'a> Assembler<'a> {
                     .filter(|token| !token.is_empty())
                     .peekable();
                 let type_token = tokens.next().unwrap_or_default();
-                if tokens.peek() == Some(&"at") {
-                    tokens.next();
-                    let token = tokens.next().unwrap_or_default();
-                    data_index = parse_int::parse::<u16>(token).unwrap_or_else(|e| -> u16 {
-                        self.errors.push(AssemblerError::FailedToParseNumber {
-                            number: token.to_string(),
-                            parseerror: e,
-                            span: SourceSpan::new(
-                                (token.as_ptr() as usize - source_start_ptr).into(),
-                                token.len(),
-                            ),
-                        });
-                        0
-                    });
+
+                let mut lonely_number: Option<&str> = None;
+                let mut data_repeats = 0;
+                for i in 0..2 {
+                    match tokens.peek().copied() {
+                        None => {}
+                        Some("at") => {
+                            if let Some(number) = lonely_number {
+                                self.errors.push(AssemblerError::NumberInfrontOperation {
+                                    span: SourceSpan::new(
+                                        (number.as_ptr() as usize - source_start_ptr).into(),
+                                        number.len(),
+                                    ),
+                                });
+                            }
+                            tokens.next();
+                            let token = tokens.next().unwrap_or_default();
+                            data_index =
+                                parse_int::parse::<u16>(token).unwrap_or_else(|e| -> u16 {
+                                    self.errors.push(AssemblerError::FailedToParseNumber {
+                                        number: token.to_string(),
+                                        parseerror: e,
+                                        span: SourceSpan::new(
+                                            (token.as_ptr() as usize - source_start_ptr).into(),
+                                            token.len(),
+                                        ),
+                                    });
+                                    0
+                                });
+                        }
+                        Some("repeat") => {
+                            if let Some(number) = lonely_number {
+                                self.errors.push(AssemblerError::NumberInfrontOperation {
+                                    span: SourceSpan::new(
+                                        (number.as_ptr() as usize - source_start_ptr).into(),
+                                        number.len(),
+                                    ),
+                                });
+                            }
+                            tokens.next();
+                            let token = tokens.next().unwrap_or_default();
+                            data_repeats =
+                                parse_int::parse::<u16>(token).unwrap_or_else(|e| -> u16 {
+                                    self.errors.push(AssemblerError::FailedToParseNumber {
+                                        number: token.to_string(),
+                                        parseerror: e,
+                                        span: SourceSpan::new(
+                                            (token.as_ptr() as usize - source_start_ptr).into(),
+                                            token.len(),
+                                        ),
+                                    });
+                                    0
+                                })
+                        }
+                        Some(other) => {
+                            if parse_int::parse::<f64>(other).is_ok() {
+                                lonely_number = Some(tokens.next().unwrap());
+                            } else {
+                                self.errors.push(AssemblerError::UnknownDataOperator {
+                                    span: SourceSpan::new(
+                                        (other.as_ptr() as usize - source_start_ptr).into(),
+                                        other.len(),
+                                    ),
+                                });
+                                tokens.next();
+                            }
+                        }
+                        _ => {}
+                    };
                 }
-                let data_repeats = if tokens.peek() == Some(&"repeat") {
-                    tokens.next();
-                    let token = tokens.next().unwrap_or_default();
-                    parse_int::parse::<u16>(token).unwrap_or_else(|e| -> u16 {
-                        self.errors.push(AssemblerError::FailedToParseNumber {
-                            number: token.to_string(),
-                            parseerror: e,
-                            span: SourceSpan::new(
-                                (token.as_ptr() as usize - source_start_ptr).into(),
-                                token.len(),
-                            ),
-                        });
-                        0
-                    })
-                } else {
-                    0
-                };
 
                 let data = match type_token {
-                    ".data" => {
+                    ".dw" => {
                         let token = tokens.next().unwrap_or_else(|| {
                             self.errors.push(AssemblerError::WrongArgumentAmount {
                                 expected_amount: 1,
@@ -414,7 +453,7 @@ impl<'a> Assembler<'a> {
                         }
                         vec![value]
                     }
-                    ".sprrow" => {
+                    ".dsprrow" => {
                         let amount = tokens.clone().count();
                         if amount != 8 {
                             let first_token = tokens.next();
@@ -472,10 +511,22 @@ impl<'a> Assembler<'a> {
                         todo!()
                     }
                 };
-                for i in 0..data_repeats {
-                    for value in data.iter() {
-                        self.data.insert(data_index, *value);
-                        data_index += 1;
+                if (data_index as usize * data.len()) + data_repeats as usize > u16::MAX as usize {
+                    self.errors
+                        .push(AssemblerError::DataInitializedBeyondRAMBounds {
+                            address: (data_index as usize * data.len()) + data_repeats as usize,
+                            span: SourceSpan::new(
+                                (instruction.as_ptr() as usize - source_start_ptr).into(),
+                                instruction.len(),
+                            ),
+                        });
+                } else {
+                    println!("writing {:?} to {data_index}, {data_repeats} times", data);
+                    for _ in 0..data_repeats {
+                        for value in data.iter() {
+                            self.data.insert(data_index, *value);
+                            data_index += 1;
+                        }
                     }
                 }
             } else {

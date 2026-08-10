@@ -1,11 +1,7 @@
 mod assembler;
 mod assemblererror;
 
-use std::{
-    fs,
-    path::PathBuf,
-    process::{self, ExitCode},
-};
+use std::{fs, path::PathBuf, process};
 
 use clap::Parser;
 use colored::Colorize;

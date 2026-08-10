@@ -1,4 +1,4 @@
-.sprrow   1, 2, 3, 4, 5, 6, 7, 8
+.dsprrow at 100 repeat 10 1, 2, 3, 4, 5, 6, 7, 8
 init_tile:
     ; A tile requires 16 words. Tile ID 1 starts at address 1016 (1000 + 1 * 16).
     ; We will fill it with 0x1111 (4369 in decimal), which represents 4 pixels 

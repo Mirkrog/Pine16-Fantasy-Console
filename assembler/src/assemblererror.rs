@@ -131,4 +131,38 @@ pub enum AssemblerError {
         #[label("number out of range (0 - 15): {number}")]
         span: SourceSpan,
     },
+    #[error("Data is initialized beyond RAM boundaries")]
+    #[diagnostic(
+        code(assembler::data_initialized_beyond_ram_bounds),
+        help(
+            "You are initializing memory addresses that go beyond the 16-bit integer limit through a too big data block or because the data block is repeated too often"
+        )
+    )]
+    DataInitializedBeyondRAMBounds {
+        address: usize,
+        #[label("The Data is overflowing to address: {address}")]
+        span: SourceSpan,
+    },
+    #[error("Unknown Data Operator")]
+    #[diagnostic(
+        code(assembler::unknown_data_operator),
+        help(
+            "use \"to\" to specify the location of the data and \"repeat\" to specify the length, both are not necessary you can also leave them out"
+        )
+    )]
+    UnknownDataOperator {
+        #[label("This data operator is unknown")]
+        span: SourceSpan,
+    },
+    #[error("Number Infront Of Operation")]
+    #[diagnostic(
+        code(assembler::number_infront_of_operator),
+        help(
+            "Numbers can not be infront of operators/nan, because they would be parsed as data which would be misleading"
+        )
+    )]
+    NumberInfrontOperation {
+        #[label("This number is infront of an operator/nan")]
+        span: SourceSpan,
+    },
 }
