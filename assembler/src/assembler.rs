@@ -3,8 +3,6 @@ use colored::Colorize;
 use miette::{NamedSource, SourceSpan};
 use simple_stopwatch::Stopwatch;
 use std::collections::{BTreeMap, HashMap};
-use std::ffi::OsString;
-use std::mem::{take, transmute};
 use std::path::PathBuf;
 use std::vec;
 use std::{fs::File, io::Write};
@@ -106,6 +104,7 @@ pub enum ArgumentType {
     RegisterPointedAddress(Register), // $* Register value points to memory
     Register(Register),               // * Points to a register
     Label(String),                    // Target for jumps / rom addresses
+    Broken, // Argument used only by the assembler, to signal a argument that failed to parse, prevents unintended errors later in the process
 }
 
 impl Argument {
@@ -185,6 +184,9 @@ impl Argument {
             ArgumentType::Address(_) => 2,
             ArgumentType::Register(_) => 3,
             ArgumentType::RegisterPointedAddress(_) => 4,
+            ArgumentType::Broken => {
+                unreachable!()
+            }
         }
     }
 
@@ -203,6 +205,9 @@ impl Argument {
                         label: value.to_string(),
                         span: SourceSpan::new(self.file_byte_index.into(), self.len_bytes),
                     })
+            }
+            ArgumentType::Broken => {
+                unreachable!()
             }
         }
     }
@@ -239,13 +244,13 @@ impl Argument {
 
 pub struct Assembler<'a> {
     source: &'a str,
-    source_name: &'a std::ffi::OsString,
+    source_name: &'a str,
     labels: HashMap<String, u16>,
     data: BTreeMap<u16, u16>,
     errors: Vec<AssemblerError>,
 }
 impl<'a> Assembler<'a> {
-    pub fn new(source: &'a str, source_name: &'a std::ffi::OsString) -> Self {
+    pub fn new(source: &'a str, source_name: &'a str) -> Self {
         Self {
             source,
             source_name,
@@ -255,9 +260,7 @@ impl<'a> Assembler<'a> {
         }
     }
     pub fn assemble(&mut self) -> Result<Vec<u16>, String> {
-        let mut assembly: Vec<u16> = Vec::new();
-
-        self.assemble_prepass();
+        let mut assembly = self.assemble_prepass();
 
         for instruction in self.source.lines() {
             let trimmed = match instruction.trim().split(';').next() {
@@ -287,18 +290,20 @@ impl<'a> Assembler<'a> {
 
             return Err(format!(
                 "Could not assemble {} due to {error_count} error(s)",
-                self.source_name.to_str().unwrap_or("[FILENAME_MALFORMED]")
+                self.source_name
             ));
         }
 
         Ok(assembly)
     }
-    /// This is where we search for all the labels and store their locations
-    fn assemble_prepass(&mut self) {
+    /// This is where we search for all the labels and store their locations and parse data sections
+    fn assemble_prepass(&mut self) -> Vec<u16> {
         let mut label_strs: Vec<&str> = Vec::new();
         let source_start_ptr = self.source.as_ptr() as usize;
         let mut instruction_index = 0;
         let mut data_index = 0;
+
+        let mut assembly = vec![0]; // we initialize it with a 0 this will later be set to the length of the vector
 
         for instruction in self.source.lines() {
             let instruction = match instruction.split(';').next() {
@@ -320,7 +325,6 @@ impl<'a> Assembler<'a> {
                         label_strs.push(instruction);
                     }
                     Some(_) => {
-                        println!("{}, {:?}, {:?}", instruction, label_strs, self.labels);
                         self.errors.push(AssemblerError::LabelDefinedMultipleTimes {
                             span: SourceSpan::new(
                                 ((label_strs
@@ -413,7 +417,6 @@ impl<'a> Assembler<'a> {
                                 tokens.next();
                             }
                         }
-                        _ => {}
                     };
                 }
 
@@ -521,10 +524,10 @@ impl<'a> Assembler<'a> {
                             ),
                         });
                 } else {
-                    println!("writing {:?} to {data_index}, {data_repeats} times", data);
                     for _ in 0..data_repeats {
                         for value in data.iter() {
-                            self.data.insert(data_index, *value);
+                            assembly.push(data_index);
+                            assembly.push(*value);
                             data_index += 1;
                         }
                     }
@@ -533,8 +536,10 @@ impl<'a> Assembler<'a> {
                 instruction_index += 1;
             }
         }
+        assembly[0] = (assembly.len() - 1) as u16;
+        assembly
     }
-    /// Actually creating the output assembly
+    /// turns the instruction given into bytecode
     fn assemble_instruction(&mut self, instruction: &str) -> Option<[u16; 3]> {
         let source_start_ptr = self.source.as_ptr() as usize;
 
@@ -605,7 +610,7 @@ impl<'a> Assembler<'a> {
             });
         }
 
-        // this looks very messy but its just turning faliure states into default values so that we can
+        // this looks very messy but its just turning failure states into default values so that we can
         // have multiple errors in one line without it falling appart down the road
         let arg1 = match tokens.next() {
             Some(token) => {
@@ -613,7 +618,11 @@ impl<'a> Assembler<'a> {
                     Ok(arg) => arg,
                     Err(e) => {
                         self.errors.push(e);
-                        return Some([0; 3]); // we return NoOp
+                        Argument {
+                            arg_type: ArgumentType::Broken,
+                            file_byte_index: 0,
+                            len_bytes: 0,
+                        }
                     }
                 }
             }
@@ -627,7 +636,11 @@ impl<'a> Assembler<'a> {
                     Ok(arg) => arg,
                     Err(e) => {
                         self.errors.push(e);
-                        return Some([0; 3]); // we return NoOp
+                        Argument {
+                            arg_type: ArgumentType::Broken,
+                            file_byte_index: 0,
+                            len_bytes: 0,
+                        }
                     }
                 }
             }
@@ -635,6 +648,12 @@ impl<'a> Assembler<'a> {
                 instruction.as_ptr() as usize - source_start_ptr + instruction.len(),
             ),
         };
+        // we allow both arguments to be parsed when one fails, but abort before they are used to prevent misleading errors
+        if matches!(arg1.arg_type, ArgumentType::Broken)
+            | matches!(arg2.arg_type, ArgumentType::Broken)
+        {
+            return Some([0; 3]);
+        }
 
         Some(match opcode {
             OpCode::NoOp => {
@@ -732,10 +751,10 @@ impl<'a> Assembler<'a> {
     }
 }
 
-pub fn run_assembler(source: String, source_name: OsString, output: PathBuf) {
+pub fn run_assembler(source: String, source_name: &str, output: PathBuf) {
     let stopwatch = Stopwatch::start_new();
 
-    let assembly = match Assembler::new(&source, &source_name).assemble() {
+    let bytecode = match Assembler::new(&source, source_name).assemble() {
         Ok(data) => data,
         Err(err) => {
             eprintln!("{}: {err}", "error".red().bold());
@@ -763,8 +782,8 @@ pub fn run_assembler(source: String, source_name: OsString, output: PathBuf) {
 
     out_file.write_all(&buffer).unwrap();
 
-    for bytepair in assembly {
-        out_file.write_u16::<LittleEndian>(bytepair).unwrap();
+    for word in bytecode {
+        out_file.write_u16::<LittleEndian>(word).unwrap();
     }
 
     println!(

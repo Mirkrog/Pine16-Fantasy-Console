@@ -13,7 +13,7 @@ struct Args {
     #[arg()]
     source: PathBuf,
 
-    /// Output file to write to (if left out, the input filename is used for lookup)
+    /// Output file to write to (if left out, the input filename is used)
     #[arg(short, long)]
     output: Option<PathBuf>,
 }
@@ -52,7 +52,19 @@ fn main() {
 
     assembler::run_assembler(
         source_string,
-        args.source.file_name().unwrap().to_owned(),
+        args.source
+            .file_name()
+            .unwrap()
+            .to_owned()
+            .to_str()
+            .unwrap_or_else(|| {
+                eprintln!(
+                    "{} to read filename, \"{:?}\" contains non UTF-8 characters",
+                    "Failed".red().bold(),
+                    args.source.file_name().unwrap()
+                );
+                process::exit(1);
+            }),
         output_path,
     );
 }

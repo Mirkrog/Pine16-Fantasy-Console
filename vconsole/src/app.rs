@@ -1,6 +1,7 @@
 use pixels::{Pixels, SurfaceTexture};
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::PathBuf;
+use std::process;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::{Duration, Instant};
 use std::{sync::Arc, thread::sleep};
@@ -181,10 +182,24 @@ impl ApplicationHandler<Pixels<'static>> for App {
                 use std::{fs::File, io::Read};
                 let mut bytes = Vec::new();
                 File::open(&self.cart_path)
-                    .unwrap()
+                    .unwrap_or_else(|e| {
+                        log::error!(
+                            "Encountered error while opening {:?}: {e}",
+                            &self.cart_path.file_name()
+                        );
+                        process::exit(1)
+                    })
                     .read_to_end(&mut bytes)
-                    .unwrap();
-                self.console.load_rom_from_bytes(bytes).unwrap();
+                    .unwrap_or_else(|e| {
+                        log::error!(
+                            "Encountered error while reading {:?}: {e}",
+                            &self.cart_path.file_name()
+                        );
+                        process::exit(1)
+                    });
+                self.console
+                    .load_rom_from_bytes(bytes)
+                    .unwrap_or_else(|_| process::exit(1));
             }
 
             let now = Instant::now();

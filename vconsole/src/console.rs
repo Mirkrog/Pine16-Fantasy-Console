@@ -434,7 +434,7 @@ impl Console {
     pub fn load_rom_from_bytes(&mut self, bytes: Vec<u8>) -> anyhow::Result<()> {
         let now = Instant::now();
 
-        compare_version(&bytes[17..20]);
+        compare_version(&bytes[17..20])?;
 
         if bytes.get(..17).unwrap_or("".as_bytes()) != "PINE16ASSEMBLY :D".as_bytes() {
             log::error!(
@@ -442,11 +442,30 @@ impl Console {
                 "PINE16ASSEMBLY :D".as_bytes(),
                 bytes.get(..17).unwrap_or("".as_bytes())
             );
-            std::process::exit(1)
+            anyhow::bail!("Rom header corrupt")
+        }
+
+        let data_length;
+        if let Some(data_length_bytes) = bytes.get(20..=21) {
+            data_length = u16::from_le_bytes([data_length_bytes[0], data_length_bytes[1]])
+        } else {
+            log::error!("Rom Corrupted");
+            anyhow::bail!("Rom corrupt");
+        }
+
+        for index_word_pair in bytes
+            .get(22..(data_length as usize)) // skip header (magic + version)
+            .unwrap_or(&[])
+            .chunks_exact(2)
+            .map(|v| u16::from_le_bytes([v[0], v[1]]))
+            .collect::<Vec<u16>>()
+            .chunks_exact(2)
+        {
+            self.write_ram(index_word_pair[0], index_word_pair[1]);
         }
 
         self.rom = bytes
-            .get(20..) // skip header (magic + version)
+            .get((21 + data_length) as usize..) // skip header (magic + version + data section)
             .unwrap_or(&[])
             .chunks_exact(2)
             .map(|v| u16::from_le_bytes([v[0], v[1]]))
@@ -491,7 +510,7 @@ impl Console {
 }
 
 /// Compares version bytes with the version of the console
-fn compare_version(version_bytes: &[u8]) {
+fn compare_version(version_bytes: &[u8]) -> anyhow::Result<()> {
     assert_eq!(version_bytes.len(), 3);
     let major_version = env!("CARGO_PKG_VERSION_MAJOR").parse::<u8>().unwrap();
     let minor_version = env!("CARGO_PKG_VERSION_MINOR").parse::<u8>().unwrap();
@@ -499,15 +518,16 @@ fn compare_version(version_bytes: &[u8]) {
 
     if major_version != version_bytes[0] || minor_version != version_bytes[1] {
         log::error!(
-            "Rom is not compatible (console_ver: {}, bin_ver: {}.{}.{})",
+            "Rom is not compatible (console_ver: {}, rom_ver: {}.{}.{})",
             env!("CARGO_PKG_VERSION"),
             version_bytes[0],
             version_bytes[1],
             version_bytes[2]
         );
+        anyhow::bail!("Rom incompatible");
     } else if patch_version != version_bytes[2] {
         log::warn!(
-            "Rom is only partially compatible (console_ver: {}, bin_ver: {}.{}.{})",
+            "Rom is only partially compatible (console_ver: {}, rom_ver: {}.{}.{})",
             env!("CARGO_PKG_VERSION"),
             version_bytes[0],
             version_bytes[1],
@@ -515,11 +535,12 @@ fn compare_version(version_bytes: &[u8]) {
         )
     } else {
         log::info!(
-            "Rom is fully compatible (console_ver: {}, bin_ver: {}.{}.{}",
+            "Rom is fully compatible (console_ver: {}, rom_ver: {}.{}.{}",
             env!("CARGO_PKG_VERSION"),
             version_bytes[0],
             version_bytes[1],
             version_bytes[2]
         )
     }
+    Ok(())
 }
