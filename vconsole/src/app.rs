@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::process;
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::{Duration, Instant};
+use std::{fs::File, io::Read};
 use std::{sync::Arc, thread::sleep};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -179,7 +180,8 @@ impl ApplicationHandler<Pixels<'static>> for App {
         #[cfg(not(target_arch = "wasm32"))]
         {
             if !self.console.is_rom_loaded() {
-                use std::{fs::File, io::Read};
+                log::info!("Loading Cartridge: {:?}", self.cart_path.file_name());
+
                 let mut bytes = Vec::new();
                 File::open(&self.cart_path)
                     .unwrap_or_else(|e| {
@@ -289,6 +291,11 @@ pub fn run(
             cart_path,
             console_guardrails,
         );
+        if console_guardrails {
+            log::warn!("Running with guardrails")
+        } else {
+            log::info!("Running without guardrails")
+        }
         event_loop.run_app(&mut app)?;
     }
     #[cfg(target_arch = "wasm32")]

@@ -453,19 +453,8 @@ impl Console {
             anyhow::bail!("Rom corrupt");
         }
 
-        for index_word_pair in bytes
-            .get(22..(data_length as usize) * 2) // skip header (magic + version)
-            .unwrap_or(&[])
-            .chunks_exact(2)
-            .map(|v| u16::from_le_bytes([v[0], v[1]]))
-            .collect::<Vec<u16>>()
-            .chunks_exact(2)
-        {
-            self.write_ram(index_word_pair[0], index_word_pair[1]);
-        }
-
         self.rom = bytes
-            .get((22 + data_length * 2) as usize..) // skip header (magic + version + data section)
+            .get((22 + data_length * 4) as usize..) // skip header (magic + version + data section)
             .unwrap_or(&[])
             .chunks_exact(2)
             .map(|v| u16::from_le_bytes([v[0], v[1]]))
@@ -500,6 +489,21 @@ impl Console {
             self.sram[314] = 0xF747; // Index 14: Electric Lemon
             self.sram[315] = 0x2EF1; // Index 15: Minty Green
         }
+
+        log::info!("Parsing data section");
+        log::info!("Data section length: {data_length}");
+
+        for index_word_pair in bytes
+            .get(22..22 + (data_length * 4) as usize) // skip header (magic + version)
+            .unwrap_or(&[])
+            .chunks_exact(2)
+            .map(|v| u16::from_le_bytes([v[0], v[1]]))
+            .collect::<Vec<u16>>()
+            .chunks_exact(2)
+        {
+            self.write_ram(index_word_pair[0], index_word_pair[1]);
+        }
+
         log::info!(
             "Took {}s to load ROM",
             (now.elapsed().as_nanos() as f32) / 1_000_000_f32
