@@ -111,10 +111,7 @@ pub enum AssemblerError {
         span: SourceSpan,
     },
     #[error("Wrong Amount Of Arguments")]
-    #[diagnostic(
-        code(assembler::wrong_argument_amount),
-        help("The consoles memory is cleared when a ROM is loaded")
-    )]
+    #[diagnostic(code(assembler::wrong_argument_amount))]
     WrongArgumentAmount {
         expected_amount: usize,
         amount: usize,

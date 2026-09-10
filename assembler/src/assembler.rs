@@ -303,7 +303,7 @@ impl<'a> Assembler<'a> {
         let mut instruction_index = 0;
         let mut data_index = 0;
 
-        let mut assembly = vec![0]; // we initialize it with a 0 this will later be set to the length of the vector
+        let mut data_buffer: BTreeMap<u16, u16> = BTreeMap::new(); // we will write the data to a map to duplicate data writes
 
         for instruction in self.source.lines() {
             let instruction = match instruction.split(';').next() {
@@ -352,7 +352,7 @@ impl<'a> Assembler<'a> {
                 let type_token = tokens.next().unwrap_or_default();
 
                 let mut lonely_number: Option<&str> = None;
-                let mut data_repeats = 0;
+                let mut data_repeats = 1;
                 for i in 0..2 {
                     match tokens.peek().copied() {
                         None => {}
@@ -526,8 +526,7 @@ impl<'a> Assembler<'a> {
                 } else {
                     for _ in 0..data_repeats {
                         for value in data.iter() {
-                            assembly.push(data_index);
-                            assembly.push(*value);
+                            data_buffer.insert(data_index, *value);
                             data_index += 1;
                         }
                     }
@@ -536,7 +535,13 @@ impl<'a> Assembler<'a> {
                 instruction_index += 1;
             }
         }
-        assembly[0] = (assembly.len() - 1) as u16;
+
+        let mut assembly = vec![data_buffer.len() as u16];
+
+        // converting the Map into a Vector and extending the assembly with it
+        // btw I kinda like this code, it looks clean :]
+        assembly.extend(data_buffer.iter().flat_map(|(k, v)| [*k, *v]));
+
         assembly
     }
     /// turns the instruction given into bytecode

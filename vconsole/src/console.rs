@@ -454,7 +454,7 @@ impl Console {
         }
 
         for index_word_pair in bytes
-            .get(22..(data_length as usize)) // skip header (magic + version)
+            .get(22..(data_length as usize) * 2) // skip header (magic + version)
             .unwrap_or(&[])
             .chunks_exact(2)
             .map(|v| u16::from_le_bytes([v[0], v[1]]))
@@ -465,7 +465,7 @@ impl Console {
         }
 
         self.rom = bytes
-            .get((21 + data_length) as usize..) // skip header (magic + version + data section)
+            .get((22 + data_length * 2) as usize..) // skip header (magic + version + data section)
             .unwrap_or(&[])
             .chunks_exact(2)
             .map(|v| u16::from_le_bytes([v[0], v[1]]))
