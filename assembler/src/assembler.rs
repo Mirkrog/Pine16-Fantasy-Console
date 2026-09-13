@@ -32,6 +32,8 @@ enum OpCode {
     Pop,
     Jsr,
     Rtr,
+    FDump,
+    RDump,
 }
 impl OpCode {
     fn from_str(string: &str, file_byte_index: usize) -> Result<Self, AssemblerError> {
@@ -56,6 +58,8 @@ impl OpCode {
             "pop" => Ok(OpCode::Pop),
             "jsr" => Ok(OpCode::Jsr),
             "rtr" => Ok(OpCode::Rtr),
+            "fdump" => Ok(OpCode::FDump),
+            "rdump" => Ok(OpCode::RDump),
             other => Err(AssemblerError::UnknownOpCode {
                 opcode: other.to_string(),
                 span: SourceSpan::new(file_byte_index.into(), string.len()),
@@ -683,7 +687,9 @@ impl<'a> Assembler<'a> {
             OpCode::Stall | OpCode::Jmp | OpCode::Await | OpCode::Push | OpCode::Jsr => {
                 self.convert_to_bytecode(opcode, arg1, arg2, Some(|arg| arg.is_readable()), None)
             }
-            OpCode::Rtr => self.convert_to_bytecode(opcode, arg1, arg2, None, None),
+            OpCode::Rtr | OpCode::FDump | OpCode::RDump => {
+                self.convert_to_bytecode(opcode, arg1, arg2, None, None)
+            }
             OpCode::Pop => {
                 self.convert_to_bytecode(opcode, arg1, arg2, Some(|arg| arg.is_writable()), None)
             }

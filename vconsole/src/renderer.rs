@@ -113,7 +113,7 @@ impl Renderer {
         }
     }
     /// reads the consoles memory to draw sprites to the Pixel buffer
-    pub fn draw(&mut self, ram_slice: &[u16; 65535]) {
+    pub fn draw(&mut self, ram_slice: &[u16; 65535], dump_frame: bool) {
         let background_map = &ram_slice[TILEMAP_OFFSET..TILEMAP_OFFSET + 1000];
         let sprite_layer = &ram_slice[TILEMAP_OFFSET + 1000..TILEMAP_OFFSET + 1999];
         let foreground_layer = &ram_slice[TILEMAP_OFFSET + 1999..TILEMAP_OFFSET + 2999];
@@ -165,6 +165,17 @@ impl Renderer {
                 (tile_word & 0xFF00) as u8,
                 (i * 8) % CANVAS_WIDTH,
                 (i / (CANVAS_WIDTH / 8)) * 8,
+            );
+        }
+        if dump_frame {
+            log::info!(
+                "{:?}",
+                self.pixel_buffer
+                    .as_mut()
+                    .expect("Tried to dump uninitialized Pixels canvas")
+                    .frame_mut()
+                    .chunks_exact(4)
+                    .collect::<Vec<&[u8]>>()
             );
         }
     }

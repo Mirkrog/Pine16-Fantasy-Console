@@ -30,6 +30,8 @@ enum OpCode {
     Pop,
     Jsr,
     Rtr,
+    FDump,
+    RDump,
 }
 impl OpCode {
     fn from_u8(bytecode: u8, guardrails: bool) -> OpCode {
@@ -54,6 +56,7 @@ impl OpCode {
             17 => OpCode::Pop,
             18 => OpCode::Jsr,
             19 => OpCode::Rtr,
+            20 => OpCode::FDump,
             other => {
                 if guardrails {
                     panic!("Unknown OpCode: {other}")
@@ -149,6 +152,7 @@ pub struct Console {
     stall_timer: u16,
     registers: [u16; 5],
     last_pressed_key: Option<keyboard::Key>,
+    dump_next_frame: bool,
     guardrails: bool,
 }
 
@@ -163,6 +167,7 @@ impl Console {
             stall_timer: 0,
             registers: [0; 5],
             last_pressed_key: None,
+            dump_next_frame: true,
             guardrails,
         }
     }
@@ -294,6 +299,10 @@ impl Console {
                     self.program_counter = self.read_arg(&instruction.arg1);
                 }
                 OpCode::Rtr => self.program_counter = self.pop_stack(),
+                OpCode::FDump => self.dump_next_frame = true,
+                OpCode::RDump => {
+                    log::info!("{:?}", self.sram)
+                }
             }
             if !jumped {
                 self.program_counter += 1;
@@ -311,7 +320,8 @@ impl Console {
             step_counter += 1;
         }
 
-        self.renderer.draw(&self.sram);
+        self.renderer.draw(&self.sram, self.dump_next_frame);
+        self.dump_next_frame = false;
     }
     fn read_arg(&self, arg: &Argument) -> u16 {
         match arg.arg_type {

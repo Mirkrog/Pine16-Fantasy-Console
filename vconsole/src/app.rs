@@ -210,10 +210,11 @@ impl ApplicationHandler<Pixels<'static>> for App {
             if let Some(window) = &self.window {
                 window.request_redraw();
             }
-
-            sleep(Duration::from_millis(
-                ((1.0 / 30.0) * 1000.0) as u64 - now.elapsed().subsec_millis() as u64,
-            ));
+            if (((1.0 / 30.0) * 1000.0) as u64) > now.elapsed().subsec_millis() as u64 {
+                sleep(Duration::from_millis(
+                    (((1.0 / 30.0) * 1000.0) as u64) - (now.elapsed().subsec_millis() as u64),
+                ));
+            }
         }
         #[cfg(target_arch = "wasm32")]
         {
