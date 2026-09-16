@@ -2,6 +2,7 @@ use clap::Parser;
 use std::{path::PathBuf, process};
 
 mod app;
+mod audiomodule;
 mod console;
 mod renderer;
 

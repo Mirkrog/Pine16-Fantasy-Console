@@ -1,4 +1,4 @@
-use crate::renderer::Renderer;
+use crate::{audiomodule::AudioModule, renderer::Renderer};
 use std::ops::{BitAnd, BitOr, BitXor, Shl, Shr};
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
@@ -57,6 +57,7 @@ impl OpCode {
             18 => OpCode::Jsr,
             19 => OpCode::Rtr,
             20 => OpCode::FDump,
+            21 => OpCode::RDump,
             other => {
                 if guardrails {
                     panic!("Unknown OpCode: {other}")
@@ -145,6 +146,7 @@ enum MemoryPois {
 
 pub struct Console {
     renderer: Renderer,
+    audio_module: AudioModule,
     rom: Vec<u16>,
     sram: [u16; u16::MAX as usize],
     program_counter: u16,
@@ -160,6 +162,7 @@ impl Console {
     pub fn new(guardrails: bool) -> Self {
         Self {
             renderer: Renderer::new(guardrails),
+            audio_module: AudioModule::new(),
             rom: Vec::new(),
             sram: [0; u16::MAX as usize],
             currently_awaiting: None,
@@ -167,7 +170,7 @@ impl Console {
             stall_timer: 0,
             registers: [0; 5],
             last_pressed_key: None,
-            dump_next_frame: true,
+            dump_next_frame: false,
             guardrails,
         }
     }

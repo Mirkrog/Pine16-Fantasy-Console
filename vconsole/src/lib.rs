@@ -3,6 +3,8 @@ use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
 mod app;
 #[cfg(target_arch = "wasm32")]
+mod audiomodule;
+#[cfg(target_arch = "wasm32")]
 mod console;
 #[cfg(target_arch = "wasm32")]
 mod renderer;
