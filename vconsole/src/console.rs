@@ -323,6 +323,7 @@ impl Console {
             step_counter += 1;
         }
 
+        self.audio_module.render(&self.sram);
         self.renderer.draw(&self.sram, self.dump_next_frame);
         self.dump_next_frame = false;
     }
@@ -474,6 +475,7 @@ impl Console {
             .collect();
         // initializing read only flags
         {
+            log::debug!("Initializing read only flags");
             self.sram[MemoryPois::MajorConsoleVersion as usize] =
                 env!("CARGO_PKG_VERSION_MAJOR").parse::<u16>().unwrap();
             self.sram[MemoryPois::MinorConsoleVersion as usize] =
@@ -486,6 +488,7 @@ impl Console {
         }
         // initializing palette
         {
+            log::debug!("Initializing palette");
             self.sram[301] = 0x18E5; // Index 1:  Deep Night
             self.sram[302] = 0xF7BF; // Index 2:  Cloud White
             self.sram[303] = 0x424A; // Index 3:  Charcoal
@@ -503,8 +506,8 @@ impl Console {
             self.sram[315] = 0x2EF1; // Index 15: Minty Green
         }
 
-        log::info!("Parsing data section");
-        log::info!("Data section length: {data_length}");
+        log::debug!("Parsing data section");
+        log::debug!("Data section length: {data_length}");
 
         for index_word_pair in bytes
             .get(22..22 + (data_length * 4) as usize) // skip header (magic + version)
@@ -552,7 +555,7 @@ fn compare_version(version_bytes: &[u8]) -> anyhow::Result<()> {
         )
     } else {
         log::info!(
-            "Rom is fully compatible (console_ver: {}, rom_ver: {}.{}.{}",
+            "Rom is fully compatible (console_ver: {}, rom_ver: {}.{}.{})",
             env!("CARGO_PKG_VERSION"),
             version_bytes[0],
             version_bytes[1],

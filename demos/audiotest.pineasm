@@ -1,0 +1,14 @@
+; =========================================================
+; Test 1: Uninterrupted Continuous Tone
+; =========================================================
+
+start:
+
+    ; Set Sine wave to A4 (440 Hz) at clean moderate volume
+    mov $#6544, #0x00A0 ; Vol 160, Mod 0
+    mov $#6543, #440    ; Pitch 440 Hz
+
+idle_loop:
+    ; Idle loop waiting on frame ticks
+    await #8
+    jmp idle_loop

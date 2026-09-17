@@ -180,7 +180,10 @@ impl ApplicationHandler<Pixels<'static>> for App {
         #[cfg(not(target_arch = "wasm32"))]
         {
             if !self.console.is_rom_loaded() {
-                log::info!("Loading Cartridge: {:?}", self.cart_path.file_name());
+                log::info!(
+                    "Loading Cartridge: {:?}",
+                    self.cart_path.file_name().unwrap()
+                );
 
                 let mut bytes = Vec::new();
                 File::open(&self.cart_path)
