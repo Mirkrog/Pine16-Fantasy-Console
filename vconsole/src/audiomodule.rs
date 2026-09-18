@@ -6,17 +6,21 @@ use ringbuf::{
     traits::{Consumer, Observer, Producer, Split},
     wrap::caching::Caching,
 };
-use tinyaudio::*;
 
-const SAMPLE_RATE: usize = 22_050;
+use cpal::{
+    Stream,
+    traits::{DeviceTrait, HostTrait, StreamTrait},
+};
+
+const SAMPLE_RATE: usize = 11000;
 const BUFFER_SIZE: usize = SAMPLE_RATE / 30;
 
 const CHANNEL_COUNT: usize = 5;
 
-const CHANNEL_ADDRESS_OFFSET: usize = 6_543;
+const CHANNEL_ADDRESS_OFFSET: usize = 6543;
 
 pub struct AudioModule {
-    _output_device: OutputDevice,
+    _stream: Stream,
     channel_phases: [f32; CHANNEL_COUNT],
     producer: Caching<Arc<SharedRb<Heap<f32>>>, true, false>,
     lfsr_state: u16,
@@ -24,28 +28,39 @@ pub struct AudioModule {
 
 impl AudioModule {
     pub fn new() -> Self {
-        let params = OutputDeviceParameters {
-            channels_count: 1,
-            sample_rate: SAMPLE_RATE,
-            channel_sample_count: BUFFER_SIZE,
+        let host = cpal::default_host();
+        let device = host
+            .default_output_device()
+            .expect("No output device found");
+
+        let config = cpal::StreamConfig {
+            channels: 1,
+            sample_rate: SAMPLE_RATE as u32,
+            buffer_size: cpal::BufferSize::Default,
         };
 
         // The buffer is slightly bigger to allow the OS and the console to desync a little to prevent audio glitches
-        let (mut producer, mut consumer) = HeapRb::new(BUFFER_SIZE * 8).split();
+        let (mut producer, mut consumer) = HeapRb::new(BUFFER_SIZE * 4).split();
 
         for _ in 0..producer.capacity().into() {
             producer.try_push(0.0).unwrap();
         }
 
+        let stream = device
+            .build_output_stream(
+                config,
+                move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                    consumer.pop_slice(data);
+                },
+                |err| log::warn!("Audio stream error: {:?}", err),
+                None,
+            )
+            .unwrap();
+
+        stream.play().unwrap();
+
         Self {
-            _output_device: run_output_device(params, move |samples| {
-                //log::debug!("Samples available: {}", consumer.occupied_len());
-                if consumer.occupied_len() < samples.len() {
-                    log::error!("Ran out of samples");
-                }
-                consumer.pop_slice(samples);
-            })
-            .unwrap(),
+            _stream: stream,
             producer,
             channel_phases: [0.0; CHANNEL_COUNT],
             lfsr_state: 0xFFFF,
@@ -53,17 +68,20 @@ impl AudioModule {
     }
 
     pub fn render(&mut self, ram_slice: &[u16]) {
-        if self.producer.occupied_len() > BUFFER_SIZE * 4 {
-            return;
-        }
-        for _ in 0..BUFFER_SIZE {
+        let overshoot: usize = if self.producer.occupied_len() > BUFFER_SIZE * 2 {
+            0
+        } else {
+            30
+        };
+
+        for _ in 0..BUFFER_SIZE + overshoot {
             let sample = self.step_sample(ram_slice);
-            let _ = self.producer.try_push(sample);
+            self.producer.try_push(sample).unwrap();
         }
     }
 
     fn step_sample(&mut self, ram_slice: &[u16]) -> f32 {
-        let mut mixed_sum = 0.0f32;
+        let mut mixed_sum: f32 = 0.0;
 
         for ch in 0..CHANNEL_COUNT {
             let freq = ram_slice[CHANNEL_ADDRESS_OFFSET + ch * 2];

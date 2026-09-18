@@ -1,14 +1,213 @@
 ; =========================================================
-; Test 1: Uninterrupted Continuous Tone
+; The Legend of Zelda - Main Theme (Overworld Melody)
+; Architecture: PineASM 16-bit
+; Engine: 30 Hz frame ticks (await #8)
+; Channel: Square wave ($#6549 = FREQ, $#6550 = CONFIG)
+; Working RAM:   $#7150 = Duration Counter
 ; =========================================================
 
 start:
+    ; Silence all other channels explicitly
+    mov $#6543, #0      ; Sine off
+    mov $#6544, #0
+    mov $#6545, #0      ; Tri off
+    mov $#6546, #0
+    mov $#6547, #0      ; Saw off
+    mov $#6548, #0
+    mov $#6551, #0      ; Noise off
+    mov $#6552, #0
 
-    ; Set Sine wave to A4 (440 Hz) at clean moderate volume
-    mov $#6544, #0x00A0 ; Vol 160, Mod 0
-    mov $#6543, #440    ; Pitch 440 Hz
+    ; Set Square Wave: 50% duty, Volume 160
+    mov $#6550, #0x00A0
 
-idle_loop:
-    ; Idle loop waiting on frame ticks
+song_loop:
+    ; --- INTRO MOTIF ---
+    ; Bb3 (233 Hz)
+    mov $#6549, #233
+    mov $#7150, #16
+    jsr hold_note
+
+    ; F3 (175 Hz)
+    mov $#6549, #175
+    mov $#7150, #16
+    jsr hold_note
+
+    ; Bb3 (233 Hz)
+    mov $#6549, #233
+    mov $#7150, #6
+    jsr hold_note
+
+    ; Bb3 (233 Hz)
+    mov $#6549, #233
+    mov $#7150, #3
+    jsr hold_note
+
+    ; C4 (262 Hz)
+    mov $#6549, #262
+    mov $#7150, #3
+    jsr hold_note
+
+    ; D4 (294 Hz)
+    mov $#6549, #294
+    mov $#7150, #3
+    jsr hold_note
+
+    ; Eb4 (311 Hz)
+    mov $#6549, #311
+    mov $#7150, #3
+    jsr hold_note
+
+    ; --- MAIN HEROIC THEME ---
+    ; F4 (349 Hz)
+    mov $#6549, #349
+    mov $#7150, #18
+    jsr hold_note
+
+    mov $#7150, #3
+    jsr rest_note
+
+    ; F4 (349 Hz)
+    mov $#6549, #349
+    mov $#7150, #5
+    jsr hold_note
+
+    ; F#4 / Gb4 (370 Hz)
+    mov $#6549, #370
+    mov $#7150, #3
+    jsr hold_note
+
+    ; G#4 / Ab4 (415 Hz)
+    mov $#6549, #415
+    mov $#7150, #3
+    jsr hold_note
+
+    ; Bb4 (466 Hz)
+    mov $#6549, #466
+    mov $#7150, #18
+    jsr hold_note
+
+    mov $#7150, #3
+    jsr rest_note
+
+    ; Bb4 (466 Hz)
+    mov $#6549, #466
+    mov $#7150, #5
+    jsr hold_note
+
+    ; Bb4 (466 Hz)
+    mov $#6549, #466
+    mov $#7150, #3
+    jsr hold_note
+
+    ; Ab4 (415 Hz)
+    mov $#6549, #415
+    mov $#7150, #3
+    jsr hold_note
+
+    ; F#4 (370 Hz)
+    mov $#6549, #370
+    mov $#7150, #3
+    jsr hold_note
+
+    ; Ab4 (415 Hz)
+    mov $#6549, #415
+    mov $#7150, #10
+    jsr hold_note
+
+    ; F#4 (370 Hz)
+    mov $#6549, #370
+    mov $#7150, #4
+    jsr hold_note
+
+    ; F4 (349 Hz)
+    mov $#6549, #349
+    mov $#7150, #18
+    jsr hold_note
+
+    ; F4 (349 Hz)
+    mov $#6549, #349
+    mov $#7150, #8
+    jsr hold_note
+
+    ; Eb4 (311 Hz)
+    mov $#6549, #311
+    mov $#7150, #4
+    jsr hold_note
+
+    ; Eb4 (311 Hz)
+    mov $#6549, #311
+    mov $#7150, #4
+    jsr hold_note
+
+    ; F4 (349 Hz)
+    mov $#6549, #349
+    mov $#7150, #4
+    jsr hold_note
+
+    ; F#4 (370 Hz)
+    mov $#6549, #370
+    mov $#7150, #16
+    jsr hold_note
+
+    ; F4 (349 Hz)
+    mov $#6549, #349
+    mov $#7150, #6
+    jsr hold_note
+
+    ; Eb4 (311 Hz)
+    mov $#6549, #311
+    mov $#7150, #6
+    jsr hold_note
+
+    ; C#4 (277 Hz)
+    mov $#6549, #277
+    mov $#7150, #6
+    jsr hold_note
+
+    ; Eb4 (311 Hz)
+    mov $#6549, #311
+    mov $#7150, #6
+    jsr hold_note
+
+    ; D4 (294 Hz)
+    mov $#6549, #294
+    mov $#7150, #20
+    jsr hold_note
+
+    ; Pause before looping back
+    mov $#7150, #16
+    jsr rest_note
+
+    jmp song_loop
+
+; =========================================================
+; Subroutine: hold_note
+; Plays frequency in $#6549 for ($#7150 - 1) frames,
+; then inserts a 1-frame mute gap for clean note separation.
+; =========================================================
+hold_note:
+    sub $#7150, #1
+    jeq articulate_gap, $#7150
+
+note_frame_loop:
     await #8
-    jmp idle_loop
+    sub $#7150, #1
+    jne note_frame_loop, $#7150
+
+articulate_gap:
+    mov $#6549, #0
+    await #8
+    rtr
+
+; =========================================================
+; Subroutine: rest_note
+; Mutes the channel and waits for $#7150 frames.
+; =========================================================
+rest_note:
+    mov $#6549, #0
+
+rest_frame_loop:
+    await #8
+    sub $#7150, #1
+    jne rest_frame_loop, $#7150
+    rtr
