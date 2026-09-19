@@ -142,6 +142,7 @@ enum MemoryPois {
     ProgramCounter = 0x0007,
     VblankFlag = 0x0008,
     CurrentPressedKeyASCII = 0x0009,
+    GamepadState = 0x000A,
 }
 
 pub struct Console {
@@ -192,6 +193,17 @@ impl Console {
             && text.is_ascii()
             && !text.is_empty()
         {
+            // updating the gamepad in memory
+            let current_state = self.sram[MemoryPois::GamepadState as usize];
+            self.sram[MemoryPois::GamepadState as usize] = current_state
+                | match text {
+                    "w" => 0b1000,
+                    "a" => 0b0100,
+                    "s" => 0b0010,
+                    "d" => 0b0001,
+                    _ => 0,
+                };
+
             let ascii = text.bytes().next().unwrap();
 
             self.sram[MemoryPois::CurrentPressedKeyASCII as usize] = ascii as u16;
@@ -200,6 +212,22 @@ impl Console {
         }
     }
     pub fn key_released(&mut self, key: keyboard::Key) {
+        if let Some(text) = key.to_text()
+            && text.is_ascii()
+            && !text.is_empty()
+        {
+            // updating the gamepad in memory
+            let current_state = self.sram[MemoryPois::GamepadState as usize];
+            self.sram[MemoryPois::GamepadState as usize] = current_state
+                & match text {
+                    "w" => u16::MAX - 0b1000,
+                    "a" => u16::MAX - 0b0100,
+                    "s" => u16::MAX - 0b0010,
+                    "d" => u16::MAX - 0b0001,
+                    _ => u16::MAX,
+                };
+        }
+
         if self.last_pressed_key == Some(key) {
             self.sram[MemoryPois::CurrentPressedKeyASCII as usize] = 0;
         }

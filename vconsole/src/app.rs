@@ -213,10 +213,15 @@ impl ApplicationHandler<Pixels<'static>> for App {
             if let Some(window) = &self.window {
                 window.request_redraw();
             }
-            if (((1.0 / 30.0) * 1000.0) as u64) > now.elapsed().subsec_millis() as u64 {
-                sleep(Duration::from_millis(
-                    (((1.0 / 30.0) * 1000.0) as u64) - (now.elapsed().subsec_millis() as u64),
+            if ((1.0 / 30.0) * 1_000_000.0) as u64 > now.elapsed().as_micros() as u64 {
+                sleep(Duration::from_micros(
+                    ((1.0 / 30.0) * 1_000_000.0) as u64 - now.elapsed().as_micros() as u64,
                 ));
+            } else {
+                log::warn!(
+                    "Console is {}ms behind",
+                    (now.elapsed().as_micros() as u64 - ((1.0 / 30.0) * 1_000_000.0) as u64) / 1000
+                );
             }
         }
         #[cfg(target_arch = "wasm32")]
