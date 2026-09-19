@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{process, sync::Arc};
 
 use ringbuf::{
     HeapRb, SharedRb,
@@ -28,23 +28,20 @@ pub struct AudioModule {
 
 impl AudioModule {
     pub fn new() -> Self {
+        // The buffer is slightly bigger to allow the OS and the console to desync a little to prevent audio glitches
+        let (producer, mut consumer) = HeapRb::new(BUFFER_SIZE * 4).split();
+
         let host = cpal::default_host();
-        let device = host
-            .default_output_device()
-            .expect("No output device found");
+        let device = host.default_output_device().unwrap_or_else(|| {
+            log::error!("No audio output device found");
+            process::exit(1)
+        });
 
         let config = cpal::StreamConfig {
             channels: 1,
             sample_rate: SAMPLE_RATE as u32,
-            buffer_size: cpal::BufferSize::Default,
+            buffer_size: cpal::BufferSize::Fixed((SAMPLE_RATE / 30) as u32),
         };
-
-        // The buffer is slightly bigger to allow the OS and the console to desync a little to prevent audio glitches
-        let (mut producer, mut consumer) = HeapRb::new(BUFFER_SIZE * 4).split();
-
-        for _ in 0..producer.capacity().into() {
-            producer.try_push(0.0).unwrap();
-        }
 
         let stream = device
             .build_output_stream(
@@ -76,7 +73,9 @@ impl AudioModule {
 
         for _ in 0..BUFFER_SIZE + overshoot {
             let sample = self.step_sample(ram_slice);
-            self.producer.try_push(sample).unwrap();
+            self.producer
+                .try_push(sample)
+                .unwrap_or_else(|_| log::warn!("Failed to push sample buffer full"));
         }
     }
 

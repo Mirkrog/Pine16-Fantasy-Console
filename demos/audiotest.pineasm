@@ -1,213 +1,169 @@
 ; =========================================================
-; The Legend of Zelda - Main Theme (Overworld Melody)
-; Architecture: PineASM 16-bit
-; Engine: 30 Hz frame ticks (await #8)
-; Channel: Square wave ($#6549 = FREQ, $#6550 = CONFIG)
-; Working RAM:   $#7150 = Duration Counter
+; Pine16 Chiptune Engine: "Clockwork Dungeon" (Seamless Loop)
+; 
+; Channels:
+;   - Triangle ($#6545 / $#6546): Walking Bass
+;   - Square   ($#6549 / $#6550): Lead Melody
+;   - Noise    ($#6551 / $#6552): Percussion
+;
+; Working RAM:
+;   $#7150 = Duration counter
 ; =========================================================
 
 start:
-    ; Silence all other channels explicitly
+    ; 1. Clear unneeded channels
     mov $#6543, #0      ; Sine off
     mov $#6544, #0
-    mov $#6545, #0      ; Tri off
-    mov $#6546, #0
     mov $#6547, #0      ; Saw off
     mov $#6548, #0
-    mov $#6551, #0      ; Noise off
-    mov $#6552, #0
 
-    ; Set Square Wave: 50% duty, Volume 160
-    mov $#6550, #0x00A0
+    ; 2. Configure active channels
+    mov $#6546, #0x00FF ; Triangle: Full volume
+    mov $#6550, #0x408C ; Square: 25% pulse duty, Volume 140
+    mov $#6552, #0x005A ; Noise: Volume 90
 
 song_loop:
-    ; --- INTRO MOTIF ---
-    ; Bb3 (233 Hz)
-    mov $#6549, #233
-    mov $#7150, #16
-    jsr hold_note
+    ; =====================================================
+    ; MEASURE 1: D Minor Tonic
+    ; =====================================================
 
-    ; F3 (175 Hz)
-    mov $#6549, #175
-    mov $#7150, #16
-    jsr hold_note
-
-    ; Bb3 (233 Hz)
-    mov $#6549, #233
-    mov $#7150, #6
-    jsr hold_note
-
-    ; Bb3 (233 Hz)
-    mov $#6549, #233
-    mov $#7150, #3
-    jsr hold_note
-
-    ; C4 (262 Hz)
-    mov $#6549, #262
-    mov $#7150, #3
-    jsr hold_note
-
-    ; D4 (294 Hz)
-    mov $#6549, #294
-    mov $#7150, #3
-    jsr hold_note
-
-    ; Eb4 (311 Hz)
-    mov $#6549, #311
-    mov $#7150, #3
-    jsr hold_note
-
-    ; --- MAIN HEROIC THEME ---
-    ; F4 (349 Hz)
-    mov $#6549, #349
-    mov $#7150, #18
-    jsr hold_note
+    ; Beat 1: Percussion hit + Lead D5 + Bass D3
+    mov $#6551, #120
+    mov $#6549, #587    ; Lead: D5
+    mov $#6545, #147    ; Bass: D3
+    mov $#7150, #2
+    jsr step_tick
+    mov $#6551, #0
 
     mov $#7150, #3
-    jsr rest_note
+    jsr step_tick
 
-    ; F4 (349 Hz)
-    mov $#6549, #349
+    ; Beat 2: Bass F3
+    mov $#6545, #175    ; Bass: F3
     mov $#7150, #5
-    jsr hold_note
+    jsr step_tick
 
-    ; F#4 / Gb4 (370 Hz)
-    mov $#6549, #370
-    mov $#7150, #3
-    jsr hold_note
-
-    ; G#4 / Ab4 (415 Hz)
-    mov $#6549, #415
-    mov $#7150, #3
-    jsr hold_note
-
-    ; Bb4 (466 Hz)
-    mov $#6549, #466
-    mov $#7150, #18
-    jsr hold_note
-
-    mov $#7150, #3
-    jsr rest_note
-
-    ; Bb4 (466 Hz)
-    mov $#6549, #466
+    ; Beat 3: Bass A3, Lead E5
+    mov $#6549, #659    ; Lead: E5
+    mov $#6545, #220    ; Bass: A3
     mov $#7150, #5
-    jsr hold_note
+    jsr step_tick
 
-    ; Bb4 (466 Hz)
-    mov $#6549, #466
+    ; Beat 4: Bass F3, Lead F5
+    mov $#6549, #698    ; Lead: F5
+    mov $#6545, #175    ; Bass: F3
+    mov $#7150, #5
+    jsr step_tick
+
+    ; =====================================================
+    ; MEASURE 2: G Minor Subdominant
+    ; =====================================================
+
+    ; Beat 1: Percussion hit + Lead G5 + Bass G3
+    mov $#6551, #120
+    mov $#6549, #784    ; Lead: G5
+    mov $#6545, #196    ; Bass: G3
+    mov $#7150, #2
+    jsr step_tick
+    mov $#6551, #0
+
     mov $#7150, #3
-    jsr hold_note
+    jsr step_tick
 
-    ; Ab4 (415 Hz)
-    mov $#6549, #415
+    ; Beat 2: Bass Bb3, Lead F5
+    mov $#6549, #698    ; Lead: F5
+    mov $#6545, #233    ; Bass: Bb3
+    mov $#7150, #5
+    jsr step_tick
+
+    ; Beat 3: Bass D4, Lead E5
+    mov $#6549, #659    ; Lead: E5
+    mov $#6545, #294    ; Bass: D4
+    mov $#7150, #5
+    jsr step_tick
+
+    ; Beat 4: Bass Bb3, Lead D5
+    mov $#6549, #587    ; Lead: D5
+    mov $#6545, #233    ; Bass: Bb3
+    mov $#7150, #5
+    jsr step_tick
+
+    ; =====================================================
+    ; MEASURE 3: A Major Dominant Tension
+    ; =====================================================
+
+    ; Beat 1: Percussion hit + Lead C#5 + Bass A3
+    mov $#6551, #120
+    mov $#6549, #554    ; Lead: C#5
+    mov $#6545, #220    ; Bass: A3
+    mov $#7150, #2
+    jsr step_tick
+    mov $#6551, #0
+
     mov $#7150, #3
-    jsr hold_note
+    jsr step_tick
 
-    ; F#4 (370 Hz)
-    mov $#6549, #370
+    ; Beat 2: Bass C#4, Lead D5
+    mov $#6549, #587    ; Lead: D5
+    mov $#6545, #277    ; Bass: C#4
+    mov $#7150, #5
+    jsr step_tick
+
+    ; Beat 3: Bass E4, Lead E5
+    mov $#6549, #659    ; Lead: E5
+    mov $#6545, #330    ; Bass: E4
+    mov $#7150, #5
+    jsr step_tick
+
+    ; Beat 4: Bass A3, Lead G5
+    mov $#6549, #784    ; Lead: G5
+    mov $#6545, #220    ; Bass: A3
+    mov $#7150, #5
+    jsr step_tick
+
+    ; =====================================================
+    ; MEASURE 4: Turnaround Cadence
+    ; Prepares immediate harmonic pull back to D minor
+    ; =====================================================
+
+    ; Beat 1: Lead F5, Bass D3
+    mov $#6551, #160
+    mov $#6549, #698    ; Lead: F5
+    mov $#6545, #147    ; Bass: D3
+    mov $#7150, #2
+    jsr step_tick
+    mov $#6551, #0
+
     mov $#7150, #3
-    jsr hold_note
+    jsr step_tick
 
-    ; Ab4 (415 Hz)
-    mov $#6549, #415
-    mov $#7150, #10
-    jsr hold_note
+    ; Beat 2: Lead E5, Bass F3
+    mov $#6549, #659    ; Lead: E5
+    mov $#6545, #175    ; Bass: F3
+    mov $#7150, #5
+    jsr step_tick
 
-    ; F#4 (370 Hz)
-    mov $#6549, #370
-    mov $#7150, #4
-    jsr hold_note
+    ; Beat 3: Lead C#5 (leading tone), Bass G3
+    mov $#6549, #554    ; Lead: C#5
+    mov $#6545, #196    ; Bass: G3
+    mov $#7150, #5
+    jsr step_tick
 
-    ; F4 (349 Hz)
-    mov $#6549, #349
-    mov $#7150, #18
-    jsr hold_note
+    ; Beat 4: Lead E5, Bass A3 (Dominant pickup into Beat 1)
+    mov $#6549, #659    ; Lead: E5
+    mov $#6545, #220    ; Bass: A3
+    mov $#7150, #5
+    jsr step_tick
 
-    ; F4 (349 Hz)
-    mov $#6549, #349
-    mov $#7150, #8
-    jsr hold_note
-
-    ; Eb4 (311 Hz)
-    mov $#6549, #311
-    mov $#7150, #4
-    jsr hold_note
-
-    ; Eb4 (311 Hz)
-    mov $#6549, #311
-    mov $#7150, #4
-    jsr hold_note
-
-    ; F4 (349 Hz)
-    mov $#6549, #349
-    mov $#7150, #4
-    jsr hold_note
-
-    ; F#4 (370 Hz)
-    mov $#6549, #370
-    mov $#7150, #16
-    jsr hold_note
-
-    ; F4 (349 Hz)
-    mov $#6549, #349
-    mov $#7150, #6
-    jsr hold_note
-
-    ; Eb4 (311 Hz)
-    mov $#6549, #311
-    mov $#7150, #6
-    jsr hold_note
-
-    ; C#4 (277 Hz)
-    mov $#6549, #277
-    mov $#7150, #6
-    jsr hold_note
-
-    ; Eb4 (311 Hz)
-    mov $#6549, #311
-    mov $#7150, #6
-    jsr hold_note
-
-    ; D4 (294 Hz)
-    mov $#6549, #294
-    mov $#7150, #20
-    jsr hold_note
-
-    ; Pause before looping back
-    mov $#7150, #16
-    jsr rest_note
-
+    ; Immediate jump back without muting channels
     jmp song_loop
 
 ; =========================================================
-; Subroutine: hold_note
-; Plays frequency in $#6549 for ($#7150 - 1) frames,
-; then inserts a 1-frame mute gap for clean note separation.
+; Subroutine: step_tick
+; Waits for $#7150 frames while active voices sustain.
 ; =========================================================
-hold_note:
-    sub $#7150, #1
-    jeq articulate_gap, $#7150
-
-note_frame_loop:
+step_tick:
     await #8
     sub $#7150, #1
-    jne note_frame_loop, $#7150
-
-articulate_gap:
-    mov $#6549, #0
-    await #8
-    rtr
-
-; =========================================================
-; Subroutine: rest_note
-; Mutes the channel and waits for $#7150 frames.
-; =========================================================
-rest_note:
-    mov $#6549, #0
-
-rest_frame_loop:
-    await #8
-    sub $#7150, #1
-    jne rest_frame_loop, $#7150
+    jne step_tick, $#7150
     rtr
