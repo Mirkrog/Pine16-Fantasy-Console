@@ -6,7 +6,7 @@ const TILEMAP_OFFSET: usize = TILESHEET_OFFSET + 2544;
 
 // these are just for convenience and mustn't be changed
 pub const CANVAS_WIDTH: usize = 320;
-pub const CAVAS_HEIGHT: usize = 200;
+pub const CANVAS_HEIGHT: usize = 200;
 
 pub struct Renderer {
     pixel_buffer: Option<Pixels<'static>>,
@@ -81,20 +81,16 @@ impl Renderer {
             .enumerate()
         {
             for (pixel_chunk_x, half_row) in row.iter().enumerate() {
-                let target_x = if x_flipped {
-                    8 - x + pixel_chunk_x * 4
-                } else {
-                    x + pixel_chunk_x * 4
-                };
-                let target_y = if y_flipped {
-                    8 - y + pixel_y
-                } else {
-                    y + pixel_y
-                };
-                if target_x >= CANVAS_WIDTH || target_y >= CAVAS_HEIGHT {
+                let target_y = if y_flipped { 7 - pixel_y } else { pixel_y } + y;
+                if target_y >= CANVAS_HEIGHT {
                     continue;
                 }
                 for x_offset in 0..4 {
+                    let local_x = pixel_chunk_x * 4 + x_offset;
+                    let target_x = if x_flipped { 7 - local_x } else { local_x } + x;
+                    if target_x >= CANVAS_WIDTH {
+                        continue;
+                    }
                     let shift = (3 - x_offset) * 4;
                     let color_id = ((half_row >> shift) & 0x000F) as usize;
                     if color_id == 0 {
@@ -103,8 +99,8 @@ impl Renderer {
                     let color = ram_slice[PALETTE_OFFSET + color_id];
                     let (red, green, blue) = rgb_from_rgb565(color);
                     if let Some(pixel) = frame.get_mut(
-                        (target_x + x_offset + target_y * CANVAS_WIDTH) * 4
-                            ..(target_x + x_offset + target_y * CANVAS_WIDTH) * 4 + 4,
+                        (target_x + target_y * CANVAS_WIDTH) * 4
+                            ..(target_x + target_y * CANVAS_WIDTH) * 4 + 4,
                     ) {
                         pixel.copy_from_slice(&[red, green, blue, 0xFF]);
                     }
@@ -146,7 +142,7 @@ impl Renderer {
         }
         // drawing the sprite layer
         for tile_words in sprite_layer.chunks_exact(3) {
-            if tile_words[1] as usize > CANVAS_WIDTH || tile_words[2] as usize > CAVAS_HEIGHT {
+            if tile_words[1] as usize > CANVAS_WIDTH || tile_words[2] as usize > CANVAS_HEIGHT {
                 continue;
             }
             self.draw_tile(

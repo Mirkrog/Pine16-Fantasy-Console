@@ -1,0 +1,23 @@
+; Define Tile ID 1 (starts at memory address 1000)
+; Using color 5 (Cyber Pink) and color 4 (Silver)
+.dsprrow at 1000 5, 4, 5, 4, 5, 4, 5, 4
+.dsprrow at 1002 4, 5, 4, 5, 4, 5, 4, 5
+.dsprrow at 1004 5, 4, 5, 4, 5, 4, 5, 4
+.dsprrow at 1006 4, 5, 4, 5, 4, 5, 4, 5
+.dsprrow at 1008 5, 4, 5, 4, 5, 4, 5, 4
+.dsprrow at 1010 4, 5, 4, 5, 4, 5, 4, 5
+.dsprrow at 1012 5, 4, 5, 4, 5, 4, 5, 4
+.dsprrow at 1014 4, 5, 4, 5, 4, 5, 4, 5
+
+start:
+    mov *A, #3544   ; TILEMAP_OFFSET is 3544 (1000 + 2544)
+    mov *B, #1000   ; 320x200 screen = 40x25 tiles = 1000 total tiles
+
+draw_loop:
+    mov $*A, #1     ; Write Tile ID 1 to the background map address pointed to by A
+    add *A, #1      ; Move to the next background map tile address
+    sub *B, #1      ; Decrement our loop counter
+    jne draw_loop, *B ; If B is not 0, jump back to draw_loop
+
+halt:
+    jmp halt        ; Infinite loop to keep the console running/rendering

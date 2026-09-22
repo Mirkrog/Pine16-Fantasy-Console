@@ -98,7 +98,7 @@ impl ApplicationHandler<Pixels<'static>> for App {
             self.console.resume_renderer(
                 Pixels::new(
                     crate::renderer::CANVAS_WIDTH as u32,
-                    crate::renderer::CAVAS_HEIGHT as u32,
+                    crate::renderer::CANVAS_HEIGHT as u32,
                     surface_texture,
                 )
                 .unwrap(),
@@ -155,13 +155,7 @@ impl ApplicationHandler<Pixels<'static>> for App {
             WindowEvent::RedrawRequested => {
                 self.console.render();
             }
-            WindowEvent::KeyboardInput {
-                device_id,
-                event,
-                is_synthetic,
-            } => {
-                let _ = device_id;
-                let _ = is_synthetic;
+            WindowEvent::KeyboardInput { event, .. } => {
                 if event.state.is_pressed() {
                     self.console.key_pressed(event.logical_key);
                 } else {

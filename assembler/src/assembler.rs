@@ -286,7 +286,7 @@ impl<'a> Assembler<'a> {
                 println!(
                     "{:?}",
                     miette::Report::new(error).with_source_code(NamedSource::new(
-                        "src/test.v16.asm",
+                        self.source_name,
                         self.source.to_string()
                     ))
                 );
@@ -410,7 +410,7 @@ impl<'a> Assembler<'a> {
                         }
                         Some(other) => {
                             if parse_int::parse::<f64>(other).is_ok() {
-                                lonely_number = Some(tokens.next().unwrap());
+                                lonely_number = Some(tokens.peek().unwrap());
                             } else {
                                 self.errors.push(AssemblerError::UnknownDataOperator {
                                     span: SourceSpan::new(
@@ -509,7 +509,7 @@ impl<'a> Assembler<'a> {
                                     ),
                                 });
                             }
-                            output[i / 4] = value << ((3 - (i % 4)) * 4);
+                            output[i / 4] |= value << ((3 - (i % 4)) * 4);
                         }
                         output
                     }

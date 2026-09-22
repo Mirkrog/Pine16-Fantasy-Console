@@ -7,6 +7,8 @@ use web_time::Instant;
 
 use winit::{dpi::PhysicalSize, keyboard};
 
+const RAM_WRITABLE_START: u16 = 300;
+
 #[repr(u8)]
 #[derive(PartialEq, Eq, Debug)]
 enum OpCode {
@@ -431,7 +433,7 @@ impl Console {
     }
     #[inline(always)]
     fn write_ram(&mut self, address: u16, value: u16) {
-        if address >= 300 {
+        if address >= RAM_WRITABLE_START {
             self.sram[address as usize] = value;
         } else {
             if self.guardrails {
@@ -453,7 +455,7 @@ impl Console {
             panic!("Stack Underflow into Read-Only memory")
         }
         self.registers[4] -= 1;
-        self.read_ram((u16::MAX - 1) - self.registers[4])
+        self.read_ram(u16::MAX - self.registers[4] - 1)
     }
     #[inline(always)]
     fn parse_next_instruction(&mut self) -> Instruction {
@@ -478,7 +480,7 @@ impl Console {
 
         compare_version(&bytes[17..20])?;
 
-        if bytes.get(..17).unwrap_or("".as_bytes()) != "PINE16ASSEMBLY :D".as_bytes() {
+        if bytes.get(..17).unwrap_or("".as_bytes()) != b"PINE16ASSEMBLY :D" {
             log::error!(
                 "ROM header corrupt, expected: {:?}, found: {:?}",
                 "PINE16ASSEMBLY :D".as_bytes(),
