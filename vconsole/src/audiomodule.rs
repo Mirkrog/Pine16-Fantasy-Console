@@ -20,10 +20,11 @@ const CHANNEL_COUNT: usize = 5;
 const CHANNEL_ADDRESS_OFFSET: usize = 6543;
 
 pub struct AudioModule {
-    _stream: Stream,
+    _stream: Option<Stream>,
     channel_phases: [f32; CHANNEL_COUNT],
     producer: Caching<Arc<SharedRb<Heap<f32>>>, true, false>,
     lfsr_state: u16,
+    enabled: bool,
 }
 
 impl AudioModule {
@@ -32,39 +33,52 @@ impl AudioModule {
         let (producer, mut consumer) = HeapRb::new(BUFFER_SIZE * 4).split();
 
         let host = cpal::default_host();
-        let device = host.default_output_device().unwrap_or_else(|| {
-            log::error!("No audio output device found");
-            process::exit(1)
-        });
+        match host.default_output_device() {
+            Some(device) => {
+                let config = cpal::StreamConfig {
+                    channels: 1,
+                    sample_rate: SAMPLE_RATE as u32,
+                    buffer_size: cpal::BufferSize::Fixed((SAMPLE_RATE / 30) as u32),
+                };
 
-        let config = cpal::StreamConfig {
-            channels: 1,
-            sample_rate: SAMPLE_RATE as u32,
-            buffer_size: cpal::BufferSize::Fixed((SAMPLE_RATE / 30) as u32),
-        };
+                let stream = device
+                    .build_output_stream(
+                        config,
+                        move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                            consumer.pop_slice(data);
+                        },
+                        |err| log::warn!("Audio stream error: {:?}", err),
+                        None,
+                    )
+                    .unwrap();
 
-        let stream = device
-            .build_output_stream(
-                config,
-                move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                    consumer.pop_slice(data);
-                },
-                |err| log::warn!("Audio stream error: {:?}", err),
-                None,
-            )
-            .unwrap();
+                stream.play().unwrap();
 
-        stream.play().unwrap();
-
-        Self {
-            _stream: stream,
-            producer,
-            channel_phases: [0.0; CHANNEL_COUNT],
-            lfsr_state: 0xFFFF,
+                Self {
+                    _stream: Some(stream),
+                    producer,
+                    channel_phases: [0.0; CHANNEL_COUNT],
+                    lfsr_state: 0xFFFF,
+                    enabled: true,
+                }
+            }
+            None => {
+                log::error!("No audio output device found, dissabling audio!");
+                Self {
+                    _stream: None,
+                    producer,
+                    channel_phases: [0.0; CHANNEL_COUNT],
+                    lfsr_state: 0xFFFF,
+                    enabled: false,
+                }
+            }
         }
     }
 
     pub fn render(&mut self, ram_slice: &[u16]) {
+        if !self.enabled {
+            return;
+        }
         let overshoot: usize = if self.producer.occupied_len() > BUFFER_SIZE * 2 {
             0
         } else {
