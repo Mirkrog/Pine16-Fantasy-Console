@@ -2,7 +2,7 @@
 name = "vconsole"
 version = "0.5.0"
 edition = "2024"
-license = "Unlicense"
+license = "MIT"
 
 [lib]
 name = "vconsole_lib"
