@@ -429,27 +429,22 @@ mov $#3749 #24
 
 ; ---------------------------------------------------------
 ; 4. Blink the cursor on row 6, forever
-;    (the delay loops are plain mov/sub/jne so they naturally
-;    span several real render frames instead of blocking one)
+;    Paced with AWAIT on the VBLANK flag ($#8): the console renders
+;    30 frames per second, so 10 frames on / 10 frames off gives
+;    roughly the real C64 blink rate.
 ; ---------------------------------------------------------
 blink_loop:
 mov $#3784 #25
-mov *C #1600
+mov *C #10
 delay_on:
-mov *D #65535
-delay_on_inner:
-sub *D #1
-jne delay_on_inner *D
+await #8
 sub *C #1
 jne delay_on *C
 
 mov $#3784 #0
-mov *C #1600
+mov *C #10
 delay_off:
-mov *D #65535
-delay_off_inner:
-sub *D #1
-jne delay_off_inner *D
+await #8
 sub *C #1
 jne delay_off *C
 
