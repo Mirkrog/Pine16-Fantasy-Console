@@ -1860,8 +1860,9 @@ mov $#7162 #29
 mov $#7163 #29
 mov $#7164 #29
 
-; message read pointer starts at 40 (the next char to scroll in)
-mov $#7200 #40
+; message read pointer: the scroller advances it before reading, so it
+; starts at 39 to scroll message[40] in next
+mov $#7200 #39
 ; scroll speed: shift one cell every 6 frames
 mov $#7210 #6
 
