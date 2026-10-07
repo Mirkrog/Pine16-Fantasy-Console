@@ -1,4 +1,4 @@
-use std::{process, sync::Arc};
+use std::sync::Arc;
 
 use ringbuf::{
     HeapRb, SharedRb,
@@ -89,7 +89,7 @@ impl AudioModule {
             let sample = self.step_sample(ram_slice);
             self.producer
                 .try_push(sample)
-                .unwrap_or_else(|_| log::warn!("Failed to push sample buffer full"));
+                .unwrap_or_else(|_| log::warn!("Failed to push sample: buffer full"));
         }
     }
 

@@ -330,8 +330,12 @@ impl Console {
                 OpCode::Jsr => {
                     self.push_stack(self.program_counter);
                     self.program_counter = self.read_arg(&instruction.arg1);
+                    jumped = true;
                 }
-                OpCode::Rtr => self.program_counter = self.pop_stack(),
+                OpCode::Rtr => {
+                    self.program_counter = self.pop_stack();
+                    jumped = true;
+                }
                 OpCode::FDump => self.dump_next_frame = true,
                 OpCode::RDump => {
                     log::info!("{:?}", self.sram)

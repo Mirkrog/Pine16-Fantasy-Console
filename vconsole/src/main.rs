@@ -1,4 +1,4 @@
-use clap::{Parser, builder::Str};
+use clap::Parser;
 use std::{path::PathBuf, process};
 
 mod app;
