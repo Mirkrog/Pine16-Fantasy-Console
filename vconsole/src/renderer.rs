@@ -77,7 +77,9 @@ impl Renderer {
             .frame_mut();
         for (pixel_y, row) in ram_slice
             [TILESHEET_OFFSET + ((id - 1) * 16)..TILESHEET_OFFSET + ((id - 1) * 16) + 16]
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .enumerate()
         {
             for (pixel_chunk_x, half_row) in row.iter().enumerate() {
@@ -135,13 +137,13 @@ impl Renderer {
             self.draw_tile(
                 ram_slice,
                 (tile_word & 0x00FF) as usize,
-                (tile_word & 0xFF00) as u8,
+                ((tile_word >> 8) & 0xFF00) as u8,
                 (i * 8) % CANVAS_WIDTH,
                 (i / (CANVAS_WIDTH / 8)) * 8,
             );
         }
         // drawing the sprite layer
-        for tile_words in sprite_layer.chunks_exact(3) {
+        for tile_words in sprite_layer.as_chunks::<3>().0 {
             if tile_words[1] as usize > CANVAS_WIDTH || tile_words[2] as usize > CANVAS_HEIGHT {
                 continue;
             }
