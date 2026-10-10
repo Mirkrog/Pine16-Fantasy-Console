@@ -328,7 +328,7 @@ impl Console {
                     self.write_arg(&instruction.arg1, value);
                 }
                 OpCode::Jsr => {
-                    self.push_stack(self.program_counter);
+                    self.push_stack(self.program_counter + 1);
                     self.program_counter = self.read_arg(&instruction.arg1);
                     jumped = true;
                 }
